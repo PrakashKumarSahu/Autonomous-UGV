@@ -1,0 +1,7 @@
+[submodule "third_party/ros2-depth-anything-v3-trt"]
+	path = third_party/ros2-depth-anything-v3-trt
+	url = https://github.com/ika-rwth-aachen/ros2-depth-anything-v3-trt.git
+
+[submodule "third_party/yolo_ros"]
+	path = third_party/yolo_ros
+	url = https://github.com/mgonzs13/yolo_ros.git
