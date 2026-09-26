@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<robot name="ugv" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Base UGV Chassis & Drive Kinematics -->
+    <xacro:include filename="$(find ugv_description)/urdf/ugv_base.urdf.xacro" />
+
+    <!-- Vision & Inertial Sensor Modules -->
+    <xacro:include filename="$(find ugv_description)/urdf/sensors/camera.urdf.xacro" />
+    <xacro:include filename="$(find ugv_description)/urdf/sensors/imu.urdf.xacro" />
+
+</robot>

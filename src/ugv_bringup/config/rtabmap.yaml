@@ -1,0 +1,34 @@
+rtabmap:
+  ros__parameters:
+    frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_scan: false
+    approx_sync: true
+    queue_size: 10
+
+    # Memory / Database
+    Mem/IncrementalMemory: "true"
+    Mem/InitWMWithAllNodes: "false"
+    Mem/RehearsalSimilarity: "0.45"
+
+    # Visual Odometry Parameters (FAST / ORB / GFTT)
+    Vis/FeatureType: "8"  # 8=FAST/ORB (High FPS)
+    Vis/MaxFeatures: "1000"
+    Vis/MinInliers: "15"
+
+    # RGB-D Virtual Camera Odometry
+    Odom/Strategy: "0"  # Frame-to-Map or Frame-to-Frame
+    Odom/ResetCountdown: "1"
+
+    # 2D Grid Map generation for Nav2
+    Grid/FromDepth: "true"
+    Grid/RangeMax: "15.0"
+    Grid/RayTracing: "true"
+    Grid/CellSize: "0.10"
+    Grid/ClusterRadius: "0.2"
+    Grid/GroundIsObstacle: "false"
+    Grid/MaxGroundAngle: "30.0"
+    Grid/MaxObstacleHeight: "2.0"

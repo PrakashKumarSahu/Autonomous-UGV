@@ -1,0 +1,28 @@
+# Colcon build directories
+build/
+install/
+log/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Model weights and engine caches
+*.pt
+*.onnx
+*.engine
+weights/
+
+# ROS 2 generated files
+.colcon/
+*.bag
+*.mcap
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*~
