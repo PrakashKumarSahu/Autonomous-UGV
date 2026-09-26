@@ -84,8 +84,10 @@ def generate_launch_description():
             'subscribe_rgb': False,
             'subscribe_depth': False,
             'approx_sync': True,
-            'queue_size': 20
+            'queue_size': 20,
+            'delete_db_on_start': True
         }],
+        arguments=['-d'],
         remappings=[
             ('rgbd_image', '/rtabmap/rgbd_image'),
             ('odom', '/odometry/filtered'),

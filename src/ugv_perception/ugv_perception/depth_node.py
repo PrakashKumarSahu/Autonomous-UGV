@@ -37,7 +37,7 @@ class DepthEstimationNode(Node):
         self.declare_parameter('device', 'cuda:0' if torch.cuda.is_available() else 'cpu')
         self.declare_parameter('min_depth', 0.2)
         self.declare_parameter('max_depth', 25.0)
-        self.declare_parameter('publish_pointcloud', True)
+        self.declare_parameter('publish_pointcloud', False)
 
         self.input_image_topic = self.get_parameter('input_image_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value

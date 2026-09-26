@@ -27,7 +27,7 @@ def generate_launch_description():
         output='screen',
         remappings=[
             ('image_rect', '/perception/depth/image_raw'),
-            ('camera_info', '/camera/camera_info'),
+            ('camera_info', '/perception/depth/camera_info'),
             ('points', '/perception/depth/points')
         ],
         parameters=[{'use_sim_time': use_sim_time}]
