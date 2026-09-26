@@ -145,14 +145,14 @@ class YoloHazardSegmentationNode(Node):
                             ).astype(np.uint8)
 
                 else:
-                    # No masks detected, run fallback heuristic
-                    hazard_mask = self.fallback_hazard_detection(cv_image)
+                    # No masks detected, corridor is clear of detected semantic obstacles
+                    hazard_mask.fill(0)
 
             except Exception as e:
                 self.get_logger().error(f'YOLO inference error: {e}')
-                hazard_mask = self.fallback_hazard_detection(cv_image)
+                hazard_mask.fill(0)
         else:
-            hazard_mask = self.fallback_hazard_detection(cv_image)
+            hazard_mask.fill(0)
 
         # Publish hazard mask (mono8)
         mask_msg = self.bridge.cv2_to_imgmsg(hazard_mask, encoding='mono8')

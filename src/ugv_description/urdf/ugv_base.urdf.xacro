@@ -13,12 +13,10 @@
 
     <link name="base_link">
         <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <box size="${base_length} ${base_width} ${base_height}" />
+                <mesh filename="package://ugv_description/meshes/base/tugbot_simp.dae" />
             </geometry>
-            <material name="blue">
-                <color rgba="0.1 0.3 0.8 1.0" />
-            </material>
         </visual>
         <collision>
             <geometry>
@@ -44,12 +42,10 @@
     <xacro:macro name="wheel" params="prefix y_offset">
         <link name="${prefix}_wheel_link">
             <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
                 <geometry>
-                    <cylinder radius="${wheel_radius}" length="${wheel_length}" />
+                    <mesh filename="package://ugv_description/meshes/wheel/wheel.dae" />
                 </geometry>
-                <material name="black">
-                    <color rgba="0.05 0.05 0.05 1.0" />
-                </material>
             </visual>
             <collision>
                 <geometry>

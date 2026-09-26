@@ -26,19 +26,28 @@
         </inertial>
     </link>
 
+    <!-- Tugbot camera_front link matching Gazebo SDF pose (0.0553, 0, 0.4323) -->
     <joint name="base_camera_joint" type="fixed">
         <parent link="base_link" />
         <child link="camera_link" />
-        <origin xyz="${base_length / 2.0 + camera_length / 2.0} 0 ${base_height / 2.0 + 0.05}" rpy="0 0 0" />
+        <origin xyz="0.0553 0 0.4323" rpy="0 0 0" />
     </joint>
 
-    <!-- Standard ROS optical frame convention (X forward -> Z forward, Y left -> -X left, Z up -> -Y down) -->
+    <!-- Standard ROS optical frame convention -->
     <link name="camera_link_optical" />
 
     <joint name="camera_optical_joint" type="fixed">
-        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+        <origin xyz="0 0.0325 0.0125" rpy="${-pi/2} 0 ${-pi/2}" />
         <parent link="camera_link" />
         <child link="camera_link_optical" />
+    </joint>
+
+    <!-- Alias for Gazebo Tugbot frame_id: tugbot/camera_front/color -->
+    <link name="tugbot/camera_front/color" />
+    <joint name="tugbot_camera_color_joint" type="fixed">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <parent link="camera_link_optical" />
+        <child link="tugbot/camera_front/color" />
     </joint>
 
     <gazebo reference="camera_link">

@@ -173,21 +173,26 @@ class TerrainAnalysisNode(Node):
         step_cost = np.clip((diff_elev / self.max_step) * 100.0, 0, 100).astype(np.int8)
         costmap[observed] = np.maximum(costmap[observed], step_cost[observed])
 
-        # Integrate YOLO hazard mask if available
+        # Integrate YOLO hazard mask if available via geometric back-projection
         if self.latest_hazard_mask is not None:
-            # Check if forward corridor has high proportion of detected hazards
-            hazard_ratio = np.mean(self.latest_hazard_mask > 200)
-            if hazard_ratio > 0.05:
-                # Add inflated hazard penalty to cells 1m to 4m directly in front
-                front_x_start = int((half_x + 1.0) / self.resolution)
-                front_x_end = int((half_x + 4.5) / self.resolution)
-                front_y_start = int((half_y - 1.0) / self.resolution)
-                front_y_end = int((half_y + 1.0) / self.resolution)
-                
-                costmap[front_y_start:front_y_end, front_x_start:front_x_end] = np.maximum(
-                    costmap[front_y_start:front_y_end, front_x_start:front_x_end],
-                    int(min(100, hazard_ratio * 400))
-                )
+            mh, mw = self.latest_hazard_mask.shape[:2]
+            fx, fy, cx, cy = 616.0, 616.0, float(mw) / 2.0, float(mh) / 2.0
+            
+            valid_pts = pts[valid_idx]
+            cam_z = valid_pts[:, 2]
+            safe_z = np.maximum(cam_z, 0.1)
+            u = np.round((valid_pts[:, 0] / safe_z) * fx + cx).astype(np.int32)
+            v = np.round((valid_pts[:, 1] / safe_z) * fy + cy).astype(np.int32)
+            
+            in_img = (u >= 0) & (u < mw) & (v >= 0) & (v < mh)
+            if np.any(in_img):
+                u_in = u[in_img]
+                v_in = v[in_img]
+                gx_in = gx[in_img]
+                gy_in = gy[in_img]
+                hazard_hits = self.latest_hazard_mask[v_in, u_in] > 128
+                if np.any(hazard_hits):
+                    costmap[gy_in[hazard_hits], gx_in[hazard_hits]] = 100
 
         # Build and publish OccupancyGrid
         grid_msg = OccupancyGrid()

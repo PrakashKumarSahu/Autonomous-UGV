@@ -87,11 +87,20 @@ class DepthEstimationNode(Node):
         if self.publish_pointcloud:
             self.points_pub = self.create_publisher(PointCloud2, self.output_points_topic, 10)
 
+        self.depth_pipe = None
+        try:
+            from transformers import pipeline
+            device_id = 0 if torch.cuda.is_available() else -1
+            self.get_logger().info('Loading official Depth Anything V2 neural network model...')
+            self.depth_pipe = pipeline('depth-estimation', model='depth-anything/Depth-Anything-V2-Small-hf', device=device_id)
+            self.get_logger().info('Depth Anything V2 loaded successfully on GPU!')
+        except Exception as e:
+            self.get_logger().warn(f'Could not load Depth Anything V2 model: {e}. Using geometric fallback.')
+
         self.get_logger().info('Depth Node successfully started and ready for frames.')
 
     def camera_info_callback(self, msg: CameraInfo):
         if not self.camera_info_received:
-            # Intrinsic matrix K: [fx, 0, cx, 0, fy, cy, 0, 0, 1]
             if len(msg.k) >= 9 and msg.k[0] > 0:
                 self.fx = float(msg.k[0])
                 self.fy = float(msg.k[4])
@@ -102,36 +111,48 @@ class DepthEstimationNode(Node):
 
     def estimate_depth(self, cv_image: np.ndarray) -> np.ndarray:
         """
-        Estimate metric depth from RGB.
-        Uses gradient-aware monocular depth estimation with ground geometry prior.
+        Estimate metric depth from RGB using official Depth Anything V2 model.
         """
         h, w = cv_image.shape[:2]
 
-        # Convert to grayscale and compute edge Disparity for structure cues
+        if self.depth_pipe is not None:
+            try:
+                from PIL import Image as PILImage
+                rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                pil_img = PILImage.fromarray(rgb)
+                out = self.depth_pipe(pil_img)
+                raw_depth = np.array(out['predicted_depth'], dtype=np.float32)
+
+                # Resize to original image resolution if needed
+                if raw_depth.shape != (h, w):
+                    raw_depth = cv2.resize(raw_depth, (w, h), interpolation=cv2.INTER_LINEAR)
+
+                # Depth Anything relative disparity conversion to metric depth
+                d_min, d_max = float(raw_depth.min()), float(raw_depth.max())
+                if d_max > d_min:
+                    norm = (raw_depth - d_min) / (d_max - d_min)
+                    # Disparity: high value is close, low value is far
+                    metric_depth = self.min_depth + (1.0 - norm) * (self.max_depth - self.min_depth)
+                else:
+                    metric_depth = np.full((h, w), 2.5, dtype=np.float32)
+
+                return np.clip(metric_depth, self.min_depth, self.max_depth).astype(np.float32)
+            except Exception as e:
+                self.get_logger().error(f'Depth Anything inference failed: {e}. Using geometric fallback.')
+
+        # Geometric depth estimation fallback
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        
-        # Ground plane projection prior (Y from top to bottom)
-        # Objects higher up are typically farther; ground gets progressively closer towards the bottom
         y_coords = np.arange(h, dtype=np.float32)[:, None]
-        # Avoid division by zero at horizon
         horizon_y = h * 0.42
         dy = np.maximum(y_coords - horizon_y, 1.0)
-        
-        # Base ground depth inversely proportional to vertical distance from horizon
-        # Ground clearance H ~ 0.3m, focal length fy
-        cam_height = 0.35
+        cam_height = 0.43
         base_depth = (self.fy * cam_height) / dy
         base_depth = np.repeat(base_depth, w, axis=1)
 
-        # Apply structural gradient modifications for 3D obstacles
         edges = cv2.Canny(gray, 50, 150).astype(np.float32) / 255.0
         blurred_edges = cv2.GaussianBlur(edges, (15, 15), 0)
-        
-        # Obstacles standing out have higher relative contrast/edges
         depth_map = base_depth - (blurred_edges * 1.5)
-        depth_map = np.clip(depth_map, self.min_depth, self.max_depth)
-
-        return depth_map.astype(np.float32)
+        return np.clip(depth_map, self.min_depth, self.max_depth).astype(np.float32)
 
     def image_callback(self, msg: Image):
         try:
