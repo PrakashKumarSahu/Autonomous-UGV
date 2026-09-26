@@ -1,18 +1,13 @@
-rtabmap:
+rgbd_odometry:
   ros__parameters:
     frame_id: "base_footprint"
-    odom_frame_id: "odom"
-    map_frame_id: "map"
-    subscribe_depth: true
-    subscribe_rgb: true
-    subscribe_scan: false
+    odom_frame_id: "rtabmap_odom"
+    publish_tf: false
+    subscribe_rgbd: true
+    subscribe_rgb: false
+    subscribe_depth: false
     approx_sync: true
-    queue_size: 10
-
-    # Memory / Database
-    Mem/IncrementalMemory: "true"
-    Mem/InitWMWithAllNodes: "false"
-    Mem/RehearsalSimilarity: "0.45"
+    queue_size: 20
 
     # Visual Odometry Parameters (FAST / ORB / GFTT)
     Vis/FeatureType: "8"  # 8=FAST/ORB (High FPS)
@@ -23,6 +18,31 @@ rtabmap:
     Odom/Strategy: "0"  # Frame-to-Map or Frame-to-Frame
     Odom/ResetCountdown: "1"
 
+rtabmap:
+  ros__parameters:
+    frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+    subscribe_rgbd: true
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_scan: false
+    approx_sync: true
+    queue_size: 20
+    wait_for_transform: 0.5
+    tf_tolerance: 0.3
+
+    # Memory / Database
+    Mem/IncrementalMemory: "true"
+    Mem/InitWMWithAllNodes: "false"
+    Mem/RehearsalSimilarity: "0.45"
+    Mem/DepthCompressionFormat: ".png"
+
+    # Visual Feature Extraction for SLAM
+    Vis/FeatureType: "8"
+    Vis/MaxFeatures: "1000"
+    Vis/MinInliers: "15"
+
     # 2D Grid Map generation for Nav2
     Grid/FromDepth: "true"
     Grid/RangeMax: "15.0"
@@ -32,3 +52,4 @@ rtabmap:
     Grid/GroundIsObstacle: "false"
     Grid/MaxGroundAngle: "30.0"
     Grid/MaxObstacleHeight: "2.0"
+

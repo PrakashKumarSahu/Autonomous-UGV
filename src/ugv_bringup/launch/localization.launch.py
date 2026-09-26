@@ -57,6 +57,8 @@ def generate_launch_description():
             'odom_frame_id': 'rtabmap_odom',
             'publish_tf': False,  # EKF publishes the active odom -> base_footprint TF
             'subscribe_rgbd': True,
+            'subscribe_rgb': False,
+            'subscribe_depth': False,
             'approx_sync': True,
             'queue_size': 20
         }],
@@ -78,11 +80,15 @@ def generate_launch_description():
             'frame_id': 'base_footprint',
             'map_frame_id': 'map',
             'odom_frame_id': 'odom',
+            'subscribe_rgbd': True,
+            'subscribe_rgb': False,
             'subscribe_depth': False,
-            'subscribe_rgbd': True
+            'approx_sync': True,
+            'queue_size': 20
         }],
         remappings=[
             ('rgbd_image', '/rtabmap/rgbd_image'),
+            ('odom', '/odometry/filtered'),
             ('grid_map', '/map')
         ],
         condition=IfCondition(enable_rtabmap)

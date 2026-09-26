@@ -66,23 +66,15 @@ planner_server:
     planner_plugins: ["GridBased"]
 
     GridBased:
-      plugin: "nav2_smac_planner::SmacPlannerHybrid"
-      downsample_costmap: false
-      downsampling_factor: 1
-      tolerance: 0.4
+      plugin: "nav2_smac_planner::SmacPlanner2D"
+      tolerance: 0.5
       allow_unknown: true
       max_iterations: 1000000
       max_on_approach_iterations: 1000
       max_planning_time: 2.0
-      motion_model_for_search: "DUBIN"
-      angle_quantization_bins: 64
-      minimum_turning_radius: 0.4
-      reverse_penalty: 2.0
-      change_penalty: 0.1
-      non_straight_penalty: 1.2
       cost_penalty: 2.0
-      retarget_step: 0.5
-      lookup_table_size: 20.0
+      downsample_costmap: false
+      downsampling_factor: 1
 
 behaviors:
   ros__parameters:
@@ -142,18 +134,12 @@ global_costmap:
       robot_radius: 0.35
       resolution: 0.10
       track_unknown_space: true
-      plugins: ["static_layer", "terrain_layer", "inflation_layer"]
+      plugins: ["static_layer", "inflation_layer"]
 
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
         map_topic: "/map"
-
-      terrain_layer:
-        plugin: "nav2_costmap_2d::StaticLayer"
-        map_subscribe_transient_local: false
-        map_topic: "/terrain/traversability_grid"
-        subscribe_to_updates: false
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"

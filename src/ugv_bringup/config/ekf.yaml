@@ -3,8 +3,8 @@ ekf_filter_node:
     frequency: 50.0
     two_d_mode: true
     sensor_timeout: 0.1
-    transform_time_offset: 0.05
-    transform_timeout: 0.05
+    transform_time_offset: 0.25
+    transform_timeout: 0.25
 
     map_frame: map
     odom_frame: odom
