@@ -31,23 +31,23 @@ controller_server:
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
-      movement_time_allowance: 10.0
+      required_movement_radius: 0.15
+      movement_time_allowance: 15.0
 
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.35
-      yaw_goal_tolerance: 0.30
+      yaw_goal_tolerance: 0.35
       stateful: true
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.8
+      desired_linear_vel: 0.6
       lookahead_dist: 0.8
       min_lookahead_dist: 0.3
       max_lookahead_dist: 1.6
       lookahead_time: 1.2
-      rotate_to_heading_angular_vel: 0.8
+      rotate_to_heading_angular_vel: 1.0
       transform_tolerance: 0.3
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
@@ -58,7 +58,7 @@ controller_server:
       use_regulated_linear_velocity_scaling: true
       use_cost_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.1
+      regulated_linear_scaling_min_speed: 0.25
       use_rotate_to_heading: true
       rotate_to_heading_min_angle: 0.785
       max_angular_accel: 2.5
@@ -112,7 +112,7 @@ local_costmap:
       width: 8
       height: 8
       resolution: 0.08
-      robot_radius: 0.35
+      robot_radius: 0.30
       plugins: ["terrain_layer", "inflation_layer"]
 
       terrain_layer:
@@ -123,8 +123,8 @@ local_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.65
+        cost_scaling_factor: 3.5
+        inflation_radius: 0.55
 
 global_costmap:
   global_costmap:
@@ -134,7 +134,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: true
-      robot_radius: 0.35
+      robot_radius: 0.30
       resolution: 0.10
       track_unknown_space: true
       plugins: ["static_layer", "inflation_layer"]
@@ -146,8 +146,8 @@ global_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.5
-        inflation_radius: 0.75
+        cost_scaling_factor: 3.5
+        inflation_radius: 0.60
 
 velocity_smoother:
   ros__parameters:
