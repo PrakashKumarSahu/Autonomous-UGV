@@ -35,8 +35,13 @@ rtabmap:
     # Memory / Database
     Mem/IncrementalMemory: "true"
     Mem/InitWMWithAllNodes: "false"
-    Mem/RehearsalSimilarity: "0.45"
+    Mem/RehearsalSimilarity: "0.60"
     Mem/DepthCompressionFormat: ".png"
+    RGBD/LinearUpdate: "0.20"
+    RGBD/AngularUpdate: "0.15"
+    RGBD/ProximityBySpace: "true"
+    RGBD/OptimizeFromGraphEnd: "false"
+    RGBD/NeighborLinkRefining: "true"
 
     # Visual Feature Extraction for SLAM
     Vis/FeatureType: "8"

@@ -49,7 +49,8 @@ controller_server:
       max_lookahead_dist: 1.6
       lookahead_time: 1.2
       rotate_to_heading_angular_vel: 1.0
-      transform_tolerance: 0.3
+      transform_tolerance: 0.5
+      max_robot_pose_search_dist: 5.0
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.8
