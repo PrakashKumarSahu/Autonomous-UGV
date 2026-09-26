@@ -84,8 +84,12 @@ class DepthEstimationNode(Node):
 
         # Publishers
         self.depth_pub = self.create_publisher(Image, self.output_depth_topic, 10)
+        self.depth_info_pub = self.create_publisher(CameraInfo, '/perception/depth/camera_info', 10)
         if self.publish_pointcloud:
             self.points_pub = self.create_publisher(PointCloud2, self.output_points_topic, 10)
+
+        self.is_processing = False
+        self.latest_camera_info = None
 
         self.depth_pipe = None
         try:
@@ -100,6 +104,7 @@ class DepthEstimationNode(Node):
         self.get_logger().info('Depth Node successfully started and ready for frames.')
 
     def camera_info_callback(self, msg: CameraInfo):
+        self.latest_camera_info = msg
         if not self.camera_info_received:
             if len(msg.k) >= 9 and msg.k[0] > 0:
                 self.fx = float(msg.k[0])
@@ -155,25 +160,42 @@ class DepthEstimationNode(Node):
         return np.clip(depth_map, self.min_depth, self.max_depth).astype(np.float32)
 
     def image_callback(self, msg: Image):
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except Exception as e:
-            self.get_logger().error(f'Failed to convert image message: {e}')
+        if self.is_processing:
+            # Skip frame to preserve real-time synchronization and avoid queue latency
             return
 
-        # Inference
-        depth_map = self.estimate_depth(cv_image)
+        self.is_processing = True
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            depth_map = self.estimate_depth(cv_image)
 
-        # Publish 32FC1 depth image
-        frame_id = msg.header.frame_id if msg.header.frame_id else self.depth_frame_id
-        depth_msg = self.bridge.cv2_to_imgmsg(depth_map, encoding='32FC1')
-        depth_msg.header = msg.header
-        depth_msg.header.frame_id = frame_id
-        self.depth_pub.publish(depth_msg)
+            # Publish 32FC1 depth image with exact matching timestamp
+            frame_id = msg.header.frame_id if msg.header.frame_id else self.depth_frame_id
+            depth_msg = self.bridge.cv2_to_imgmsg(depth_map, encoding='32FC1')
+            depth_msg.header = msg.header
+            depth_msg.header.frame_id = frame_id
+            self.depth_pub.publish(depth_msg)
 
-        # Publish Point Cloud if enabled
-        if self.publish_pointcloud:
-            self.publish_cloud(depth_map, msg.header, frame_id)
+            # Publish matching camera info for depth_image_proc synchronization
+            if self.latest_camera_info is not None:
+                depth_info = CameraInfo()
+                depth_info.header = depth_msg.header
+                depth_info.height = depth_msg.height
+                depth_info.width = depth_msg.width
+                depth_info.distortion_model = self.latest_camera_info.distortion_model
+                depth_info.d = self.latest_camera_info.d
+                depth_info.k = self.latest_camera_info.k
+                depth_info.r = self.latest_camera_info.r
+                depth_info.p = self.latest_camera_info.p
+                self.depth_info_pub.publish(depth_info)
+
+            # Publish Point Cloud if enabled
+            if self.publish_pointcloud:
+                self.publish_cloud(depth_map, msg.header, frame_id)
+        except Exception as e:
+            self.get_logger().error(f'Failed in image_callback: {e}')
+        finally:
+            self.is_processing = False
 
     def publish_cloud(self, depth_map: np.ndarray, header: Header, frame_id: str):
         h, w = depth_map.shape

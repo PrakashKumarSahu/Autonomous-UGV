@@ -32,8 +32,9 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'approx_sync': True,
+            'approx_sync_max_interval': 0.1,
             'use_sim_time': use_sim_time,
-            'queue_size': 10
+            'queue_size': 20
         }],
         remappings=[
             ('rgb/image', '/camera/image_raw'),
@@ -54,7 +55,10 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'frame_id': 'base_footprint',
             'odom_frame_id': 'rtabmap_odom',
-            'publish_tf': False  # EKF publishes the active odom -> base_footprint TF
+            'publish_tf': False,  # EKF publishes the active odom -> base_footprint TF
+            'subscribe_rgbd': True,
+            'approx_sync': True,
+            'queue_size': 20
         }],
         remappings=[
             ('rgbd_image', '/rtabmap/rgbd_image'),

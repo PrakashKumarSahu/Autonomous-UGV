@@ -57,7 +57,7 @@ Visualization Manager:
       Update Interval: 0
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
-      Color Scheme: costmap
+      Color Scheme: map
       Draw Behind: false
       Enabled: true
       Name: TraversabilityGrid
@@ -71,7 +71,7 @@ Visualization Manager:
       Value: true
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
-      Color Scheme: costmap
+      Color Scheme: map
       Draw Behind: false
       Enabled: true
       Name: LocalCostmap

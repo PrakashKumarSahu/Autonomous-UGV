@@ -115,7 +115,6 @@ class YoloHazardSegmentationNode(Node):
                     source=cv_image,
                     conf=self.conf_thresh,
                     device=self.device_str,
-                    half=self.enable_fp16 and ('cuda' in self.device_str),
                     verbose=False
                 )
 

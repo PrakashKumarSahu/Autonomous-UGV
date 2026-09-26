@@ -163,15 +163,12 @@ class TerrainAnalysisNode(Node):
         diff_elev[observed] = max_elev[observed] - min_elev[observed]
 
         # Compute costmap values:
-        # Step obstacle cost: if delta_z > max_step -> lethal 100
-        costmap = np.full((self.num_cells_y, self.num_cells_x), -1, dtype=np.int8)
+        # Default ground space is 0 (traversable)
+        costmap = np.zeros((self.num_cells_y, self.num_cells_x), dtype=np.int8)
 
-        # Default free space for observed ground cells
-        costmap[observed] = 0
-
-        # Step height cost (rocks, drops)
+        # Step height cost (rocks, drops, physical obstacles)
         step_cost = np.clip((diff_elev / self.max_step) * 100.0, 0, 100).astype(np.int8)
-        costmap[observed] = np.maximum(costmap[observed], step_cost[observed])
+        costmap[observed] = step_cost[observed]
 
         # Clear robot footprint: robot is guaranteed free at its current position
         center_x = self.num_cells_x // 2
