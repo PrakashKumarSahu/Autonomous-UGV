@@ -2,9 +2,9 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition, EqualsSubstitution
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, EqualsSubstitution
 
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('ugv_bringup')
@@ -45,7 +45,7 @@ def generate_launch_description():
     sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_sim, 'launch', 'sim.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(EqualsSubstitution(mode, 'sim'))
+        condition=IfCondition(EqualsSubstitution(LaunchConfiguration('mode'), 'sim'))
     )
 
     # 2. Perception AI (Depth Anything + YOLO Segmentation)
