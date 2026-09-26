@@ -1,0 +1,10 @@
+grid_map_visualization:
+  ros__parameters:
+    grid_map_topic: /filtered_map
+    grid_map_visualizations: [traversability_grid]
+    traversability_grid:
+      type: occupancy_grid
+      params:
+        layer: traversability
+        data_min: 0.0
+        data_max: 100.0
