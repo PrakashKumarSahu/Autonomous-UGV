@@ -18,6 +18,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: true
+    odom_topic: /odometry/filtered
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5

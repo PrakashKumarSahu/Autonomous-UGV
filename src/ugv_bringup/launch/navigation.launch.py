@@ -16,8 +16,7 @@ def generate_launch_description():
         'controller_server',
         'planner_server',
         'behaviors',
-        'bt_navigator',
-        'velocity_smoother'
+        'bt_navigator'
     ]
 
     controller_node = Node(
@@ -25,7 +24,10 @@ def generate_launch_description():
         executable='controller_server',
         output='screen',
         parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
-        remappings=[('cmd_vel', 'cmd_vel_nav')]
+        remappings=[
+            ('cmd_vel', '/cmd_vel'),
+            ('odom', '/odometry/filtered')
+        ]
     )
 
     planner_node = Node(
@@ -52,18 +54,6 @@ def generate_launch_description():
         parameters=[nav2_params_file, {'use_sim_time': use_sim_time}]
     )
 
-    velocity_smoother_node = Node(
-        package='nav2_velocity_smoother',
-        executable='velocity_smoother',
-        name='velocity_smoother',
-        output='screen',
-        parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
-        remappings=[
-            ('cmd_vel', 'cmd_vel_nav'),
-            ('cmd_vel_smoothed', '/cmd_vel')
-        ]
-    )
-
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -83,6 +73,5 @@ def generate_launch_description():
         planner_node,
         behaviors_node,
         bt_navigator_node,
-        velocity_smoother_node,
         lifecycle_manager
     ])
