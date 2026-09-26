@@ -173,6 +173,13 @@ class TerrainAnalysisNode(Node):
         step_cost = np.clip((diff_elev / self.max_step) * 100.0, 0, 100).astype(np.int8)
         costmap[observed] = np.maximum(costmap[observed], step_cost[observed])
 
+        # Clear robot footprint: robot is guaranteed free at its current position
+        center_x = self.num_cells_x // 2
+        center_y = self.num_cells_y // 2
+        footprint_cells = int(0.6 / self.resolution)
+        costmap[center_y - footprint_cells:center_y + footprint_cells + 1,
+                center_x - footprint_cells:center_x + footprint_cells + 1] = 0
+
         # Integrate YOLO hazard mask if available via geometric back-projection
         if self.latest_hazard_mask is not None:
             mh, mw = self.latest_hazard_mask.shape[:2]
