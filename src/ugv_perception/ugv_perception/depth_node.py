@@ -59,6 +59,8 @@ class DepthEstimationNode(Node):
         self.cx = 320.0
         self.cy = 240.0
         self.camera_info_received = False
+        self.running_d_min = None
+        self.running_d_max = None
 
         # QoS Profiles
         sensor_qos = QoSProfile(
@@ -132,10 +134,20 @@ class DepthEstimationNode(Node):
                 if raw_depth.shape != (h, w):
                     raw_depth = cv2.resize(raw_depth, (w, h), interpolation=cv2.INTER_LINEAR)
 
-                # Depth Anything relative disparity conversion to metric depth
-                d_min, d_max = float(raw_depth.min()), float(raw_depth.max())
+                # Depth Anything relative disparity conversion to metric depth with EMA smoothing
+                inst_min, inst_max = float(raw_depth.min()), float(raw_depth.max())
+                alpha = 0.25
+                if self.running_d_min is None:
+                    self.running_d_min = inst_min
+                    self.running_d_max = inst_max
+                else:
+                    self.running_d_min = (1.0 - alpha) * self.running_d_min + alpha * inst_min
+                    self.running_d_max = (1.0 - alpha) * self.running_d_max + alpha * inst_max
+
+                d_min, d_max = self.running_d_min, self.running_d_max
                 if d_max > d_min:
                     norm = (raw_depth - d_min) / (d_max - d_min)
+                    norm = np.clip(norm, 0.0, 1.0)
                     # Disparity: high value is close, low value is far
                     metric_depth = self.min_depth + (1.0 - norm) * (self.max_depth - self.min_depth)
                 else:
@@ -177,17 +189,23 @@ class DepthEstimationNode(Node):
             self.depth_pub.publish(depth_msg)
 
             # Publish matching camera info for depth_image_proc synchronization
+            depth_info = CameraInfo()
+            depth_info.header = depth_msg.header
+            depth_info.height = depth_msg.height
+            depth_info.width = depth_msg.width
             if self.latest_camera_info is not None:
-                depth_info = CameraInfo()
-                depth_info.header = depth_msg.header
-                depth_info.height = depth_msg.height
-                depth_info.width = depth_msg.width
                 depth_info.distortion_model = self.latest_camera_info.distortion_model
                 depth_info.d = self.latest_camera_info.d
                 depth_info.k = self.latest_camera_info.k
                 depth_info.r = self.latest_camera_info.r
                 depth_info.p = self.latest_camera_info.p
-                self.depth_info_pub.publish(depth_info)
+            else:
+                depth_info.distortion_model = 'plumb_bob'
+                depth_info.d = [0.0, 0.0, 0.0, 0.0, 0.0]
+                depth_info.k = [self.fx, 0.0, self.cx, 0.0, self.fy, self.cy, 0.0, 0.0, 1.0]
+                depth_info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+                depth_info.p = [self.fx, 0.0, self.cx, 0.0, 0.0, self.fy, self.cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+            self.depth_info_pub.publish(depth_info)
 
             # Publish Point Cloud if enabled
             if self.publish_pointcloud:

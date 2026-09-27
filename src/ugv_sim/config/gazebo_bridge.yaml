@@ -16,10 +16,16 @@
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS
 
-- ros_topic_name: "/diff_drive_controller/odom"
+- ros_topic_name: "/odometry/filtered"
   gz_topic_name: "/model/tugbot/odometry"
   ros_type_name: "nav_msgs/msg/Odometry"
   gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/tf"
+  gz_topic_name: "/model/tugbot/tf"
+  ros_type_name: "tf2_msgs/msg/TFMessage"
+  gz_type_name: "gz.msgs.Pose_V"
   direction: GZ_TO_ROS
 
 - ros_topic_name: "/cmd_vel"
@@ -29,7 +35,7 @@
   direction: ROS_TO_GZ
 
 - ros_topic_name: "/clock"
-  gz_topic_name: "/clock"
+  gz_topic_name: "/world/world_demo/clock"
   ros_type_name: "rosgraph_msgs/msg/Clock"
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS

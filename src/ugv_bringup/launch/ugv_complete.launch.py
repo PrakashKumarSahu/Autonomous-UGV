@@ -65,7 +65,8 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(pkg_bringup, 'launch', 'localization.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'enable_rtabmap': enable_rtabmap
+            'enable_rtabmap': enable_rtabmap,
+            'mode': mode
         }.items()
     )
 

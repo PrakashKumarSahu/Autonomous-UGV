@@ -34,10 +34,15 @@ def generate_launch_description():
     )
 
     # Configure Gazebo Resource Path so all Tugbot and Warehouse models are discovered
-    gz_resource_path = os.path.expanduser(
+    local_models_path = os.path.join(pkg_ugv_sim, 'models')
+    gz_resource_path = local_models_path + ':' + os.path.expanduser(
         '~/.gz/fuel/fuel.gazebosim.org/:~/.gz/fuel/fuel.ignitionrobotics.org/movai/models/:~/.gz/models/'
     )
     set_gz_resource_path = SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', gz_resource_path)
+    set_qsg_render = SetEnvironmentVariable('QSG_RENDER_LOOP', 'basic')
+    set_qt_mitshm = SetEnvironmentVariable('QT_X11_NO_MITSHM', '1')
+    set_nv_prime = SetEnvironmentVariable('__NV_PRIME_RENDER_OFFLOAD', '1')
+    set_nv_glx = SetEnvironmentVariable('__GLX_VENDOR_LIBRARY_NAME', 'nvidia')
 
     # 1. Robot State Publisher (URDF & TF)
     robot_state_publisher = IncludeLaunchDescription(
@@ -68,6 +73,10 @@ def generate_launch_description():
         bridge_config_arg,
         use_sim_time_arg,
         set_gz_resource_path,
+        set_qsg_render,
+        set_qt_mitshm,
+        set_nv_prime,
+        set_nv_glx,
         robot_state_publisher,
         gz_sim,
         ros_gz_bridge

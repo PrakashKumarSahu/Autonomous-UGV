@@ -163,8 +163,8 @@ class TerrainAnalysisNode(Node):
         diff_elev[observed] = max_elev[observed] - min_elev[observed]
 
         # Compute costmap values:
-        # Default ground space is 0 (traversable)
-        costmap = np.zeros((self.num_cells_y, self.num_cells_x), dtype=np.int8)
+        # Default space is -1 (unknown) for unobserved areas
+        costmap = np.full((self.num_cells_y, self.num_cells_x), -1, dtype=np.int8)
 
         # Step height cost (rocks, drops, physical obstacles)
         step_cost = np.clip((diff_elev / self.max_step) * 100.0, 0, 100).astype(np.int8)

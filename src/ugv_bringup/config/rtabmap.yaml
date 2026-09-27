@@ -10,6 +10,8 @@ rgbd_odometry:
     queue_size: 20
 
     # Visual Odometry Parameters (FAST / ORB / GFTT)
+    Reg/Force3DoF: "true"
+    Odom/Holonomic: "false"
     Vis/FeatureType: "8"  # 8=FAST/ORB (High FPS)
     Vis/MaxFeatures: "1000"
     Vis/MinInliers: "15"
@@ -23,6 +25,7 @@ rtabmap:
     frame_id: "base_footprint"
     odom_frame_id: "odom"
     map_frame_id: "map"
+    publish_tf: true
     subscribe_rgbd: true
     subscribe_depth: false
     subscribe_rgb: false
@@ -32,6 +35,10 @@ rtabmap:
     wait_for_transform: 0.5
     tf_tolerance: 0.3
 
+    # Force 2D SLAM for planar ground UGV
+    Reg/Force3DoF: "true"
+    Optimizer/Slam2D: "true"
+
     # Memory / Database
     Mem/IncrementalMemory: "true"
     Mem/InitWMWithAllNodes: "false"
@@ -39,9 +46,9 @@ rtabmap:
     Mem/DepthCompressionFormat: ".png"
     RGBD/LinearUpdate: "0.20"
     RGBD/AngularUpdate: "0.15"
-    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityBySpace: "false"
     RGBD/OptimizeFromGraphEnd: "false"
-    RGBD/NeighborLinkRefining: "true"
+    RGBD/NeighborLinkRefining: "false"
 
     # Visual Feature Extraction for SLAM
     Vis/FeatureType: "8"
@@ -53,8 +60,12 @@ rtabmap:
     Grid/RangeMax: "15.0"
     Grid/RayTracing: "true"
     Grid/CellSize: "0.10"
-    Grid/ClusterRadius: "0.2"
-    Grid/GroundIsObstacle: "false"
-    Grid/MaxGroundAngle: "30.0"
+    Grid/NormalsSegmentation: "false"
+    Grid/MaxGroundHeight: "0.12"
     Grid/MaxObstacleHeight: "2.0"
+    Grid/GroundIsObstacle: "false"
+    Grid/NoiseFilteringRadius: "0.15"
+    Grid/NoiseFilteringMinNeighbors: "5"
+    GridGlobal/FootprintRadius: "0.55"
+    GridGlobal/Eroded: "true"
 

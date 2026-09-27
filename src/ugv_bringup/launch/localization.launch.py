@@ -2,7 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, EqualsSubstitution
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
@@ -11,17 +11,19 @@ def generate_launch_description():
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
     rtabmap_config = os.path.join(pkg_bringup, 'config', 'rtabmap.yaml')
 
+    mode = LaunchConfiguration('mode', default='sim')
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     enable_rtabmap = LaunchConfiguration('enable_rtabmap', default='true')
 
-    # 1. robot_localization EKF State Estimator (Sensor Fusion)
+    # 1. robot_localization EKF State Estimator (Sensor Fusion for Physical Hardware)
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
         name='ekf_filter_node',
         output='screen',
         parameters=[ekf_config, {'use_sim_time': use_sim_time}],
-        remappings=[('odometry/filtered', '/odometry/filtered')]
+        remappings=[('odometry/filtered', '/odometry/filtered')],
+        condition=IfCondition(EqualsSubstitution(LaunchConfiguration('mode'), 'hw'))
     )
 
     # 2. RTAB-Map RGB-D Sync Node
@@ -32,7 +34,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'approx_sync': True,
-            'approx_sync_max_interval': 0.1,
+            'approx_sync_max_interval': 0.25,
             'use_sim_time': use_sim_time,
             'queue_size': 20
         }],
@@ -97,10 +99,12 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument('mode', default_value='sim', description='Launch mode: sim or hw'),
         DeclareLaunchArgument('use_sim_time', default_value='true', description='Use simulation clock'),
         DeclareLaunchArgument('enable_rtabmap', default_value='true', description='Enable RTAB-Map SLAM'),
         ekf_node,
         rgbd_sync_node,
-        rtabmap_odom_node,
+        # rtabmap_odom_node omitted: EKF fuses wheel odometry and IMU directly,
+        # RTAB-Map SLAM subscribes to /odometry/filtered.
         rtabmap_slam_node
     ])
