@@ -6,6 +6,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+
 def generate_launch_description():
     pkg_ugv_sim = get_package_share_directory('ugv_sim')
     pkg_ugv_description = get_package_share_directory('ugv_description')
@@ -68,6 +69,20 @@ def generate_launch_description():
         output='screen'
     )
 
+    # 4. Joint State Relay: renames Gazebo SDF joint names to URDF names
+    # SDF Tugbot model uses: wheel_left_joint / wheel_right_joint
+    # URDF robot model uses: left_wheel_joint / right_wheel_joint
+    # Without this relay, robot_state_publisher cannot publish TF for wheel links,
+    # causing RViz "No transform from [left_wheel_link]" / "No transform from [right_wheel_link]"
+    joint_state_relay = Node(
+        package='ugv_sim',
+        executable='joint_state_relay.py',
+        name='joint_state_relay',
+        output='screen',
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}]
+    )
+
+
     return LaunchDescription([
         world_arg,
         bridge_config_arg,
@@ -79,5 +94,6 @@ def generate_launch_description():
         set_nv_glx,
         robot_state_publisher,
         gz_sim,
-        ros_gz_bridge
+        ros_gz_bridge,
+        joint_state_relay
     ])

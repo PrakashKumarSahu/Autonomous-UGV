@@ -28,7 +28,14 @@ def generate_launch_description():
         parameters=[{
             'robot_description': robot_description,
             'use_sim_time': use_sim_time
-        }]
+        }],
+        remappings=[
+            # Read joint states from relay node that renames SDF joints → URDF joints.
+            # In sim mode: Gazebo bridge publishes wheel_left_joint/wheel_right_joint
+            # but URDF defines left_wheel_joint/right_wheel_joint. The relay node
+            # (joint_state_relay.py) outputs corrected names on /joint_states_urdf.
+            ('joint_states', 'joint_states_urdf')
+        ]
     )
 
     # joint_state_publisher is intentionally not created here.

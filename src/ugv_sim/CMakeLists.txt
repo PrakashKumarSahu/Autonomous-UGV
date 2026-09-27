@@ -8,8 +8,14 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY config launch worlds
+  DIRECTORY config launch worlds models scripts
   DESTINATION share/${PROJECT_NAME}
+)
+
+# Install relay script as a runnable node executable
+install(
+  PROGRAMS scripts/joint_state_relay.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()
