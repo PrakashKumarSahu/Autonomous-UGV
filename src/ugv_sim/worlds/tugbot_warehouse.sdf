@@ -29,7 +29,8 @@
         <scene>scene</scene>
         <ambient_light>0.4 0.4 0.4</ambient_light>
         <background_color>0.8 0.8 0.8</background_color>
-        <camera_pose>13.4 -6.1 2.23 0 0.4 -1.83</camera_pose>
+        <!-- Gazebo GUI camera positioned near robot spawn at (0,0) for a close-up view -->
+        <camera_pose>-3.0 -2.0 2.5 0 0.4 0.5</camera_pose>
       </plugin>
 
       <!-- World control -->
@@ -195,7 +196,10 @@
         https://fuel.ignitionrobotics.org/1.0/MovAi/models/Tugbot
       </uri>
       <name>tugbot</name>
-      <pose>11.5 -10.6 0.1 0 0 3.14159</pose>
+      <!-- Spawn at world origin so odom frame = world frame at startup.
+           Previously at (11.5, -10.6, yaw=π): Nav2 1-2m goals were invisible in Gazebo
+           because they were sub-pixel displacements at warehouse scale. -->
+      <pose>0.0 0.0 0.1 0 0 0</pose>
     </include>
 
     <!-- Carts -->

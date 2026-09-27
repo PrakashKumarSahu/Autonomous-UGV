@@ -181,16 +181,20 @@ class DepthEstimationNode(Node):
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             depth_map = self.estimate_depth(cv_image)
 
-            # Publish 32FC1 depth image with exact matching timestamp
-            frame_id = msg.header.frame_id if msg.header.frame_id else self.depth_frame_id
+            # Publish 32FC1 depth image with exact matching timestamp.
+            # Always use the canonical ROS optical frame (camera_link_optical), NOT the
+            # Gazebo-injected frame_id (tugbot/camera_front/color). Using the Gazebo
+            # frame_id here breaks point_cloud_xyz_node synchronisation because the
+            # depth CameraInfo would carry a mismatching frame_id.
             depth_msg = self.bridge.cv2_to_imgmsg(depth_map, encoding='32FC1')
             depth_msg.header = msg.header
-            depth_msg.header.frame_id = frame_id
+            depth_msg.header.frame_id = self.depth_frame_id  # always 'camera_link_optical'
             self.depth_pub.publish(depth_msg)
 
-            # Publish matching camera info for depth_image_proc synchronization
+            # Publish matching camera info for depth_image_proc synchronization.
+            # frame_id must match depth image frame_id exactly.
             depth_info = CameraInfo()
-            depth_info.header = depth_msg.header
+            depth_info.header = depth_msg.header  # already has canonical frame_id
             depth_info.height = depth_msg.height
             depth_info.width = depth_msg.width
             if self.latest_camera_info is not None:
@@ -207,9 +211,9 @@ class DepthEstimationNode(Node):
                 depth_info.p = [self.fx, 0.0, self.cx, 0.0, 0.0, self.fy, self.cy, 0.0, 0.0, 0.0, 1.0, 0.0]
             self.depth_info_pub.publish(depth_info)
 
-            # Publish Point Cloud if enabled
+            # Publish Point Cloud if enabled (uses canonical frame_id)
             if self.publish_pointcloud:
-                self.publish_cloud(depth_map, msg.header, frame_id)
+                self.publish_cloud(depth_map, msg.header, self.depth_frame_id)
         except Exception as e:
             self.get_logger().error(f'Failed in image_callback: {e}')
         finally:

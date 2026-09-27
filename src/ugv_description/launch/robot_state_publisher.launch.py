@@ -31,16 +31,18 @@ def generate_launch_description():
         }]
     )
 
-    joint_state_publisher_node = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        name='joint_state_publisher',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
+    # joint_state_publisher is intentionally not created here.
+    # In sim mode, ros_gz_bridge provides real /joint_states from Gazebo.
+    # In hw mode, add a joint_state_publisher or joint_state_broadcaster as needed.
+
 
     return LaunchDescription([
         declare_use_sim_time_cmd,
         robot_state_publisher_node,
-        joint_state_publisher_node
+        # NOTE: joint_state_publisher is intentionally omitted in sim mode.
+        # ros_gz_bridge publishes real joint states from Gazebo on /joint_states.
+        # Running joint_state_publisher alongside causes duplicate publishers that
+        # feed zeroed wheel positions to robot_state_publisher, making RViz show
+        # wheels frozen at their neutral pose. For hw mode, add joint_state_publisher
+        # back in a hw-conditional block if needed.
     ])

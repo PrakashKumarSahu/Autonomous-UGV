@@ -163,15 +163,8 @@ global_costmap:
         cost_scaling_factor: 3.5
         inflation_radius: 0.60
 
-velocity_smoother:
-  ros__parameters:
-    use_sim_time: true
-    smoothing_frequency: 20.0
-    scale_velocities: false
-    feedback: "OPEN_LOOP"
-    max_velocity: [1.2, 0.0, 1.8]
-    min_velocity: [-0.6, 0.0, -1.8]
-    max_accel: [1.5, 0.0, 2.5]
-    max_decel: [-1.5, 0.0, -2.5]
-    odom_topic: "/odometry/filtered"
-    odom_duration: 0.1
+
+# velocity_smoother is intentionally not launched in this stack.
+# The RegulatedPurePursuitController handles velocity smoothing internally
+# via max_angular_accel and approach_velocity_scaling_dist parameters.
+
