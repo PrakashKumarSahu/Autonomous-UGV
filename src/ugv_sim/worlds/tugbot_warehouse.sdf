@@ -29,9 +29,25 @@
         <scene>scene</scene>
         <ambient_light>0.4 0.4 0.4</ambient_light>
         <background_color>0.8 0.8 0.8</background_color>
-        <!-- Gazebo GUI camera positioned near robot spawn at (0,0) for a close-up view -->
-        <camera_pose>-3.0 -2.0 2.5 0 0.4 0.5</camera_pose>
+        <!-- Gazebo GUI camera positioned near the Tugbot's aisle spawn position -->
+        <camera_pose>9.5 -10.6 3.5 0 0.5 0.1</camera_pose>
       </plugin>
+
+      <!-- Entity tracker: keeps camera following the Tugbot so navigation is visible -->
+      <plugin filename="FollowEntity" name="Follow Entity">
+        <ignition-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">floating</property>
+          <property type="double" key="width">200</property>
+          <property type="double" key="height">50</property>
+          <property type="double" key="z">2</property>
+          <anchors target="3D View">
+            <line own="right" target="right"/>
+            <line own="top" target="top"/>
+          </anchors>
+        </ignition-gui>
+      </plugin>
+
 
       <!-- World control -->
       <plugin filename="WorldControl" name="World control">
@@ -196,10 +212,13 @@
         https://fuel.ignitionrobotics.org/1.0/MovAi/models/Tugbot
       </uri>
       <name>tugbot</name>
-      <!-- Spawn at world origin so odom frame = world frame at startup.
-           Previously at (11.5, -10.6, yaw=π): Nav2 1-2m goals were invisible in Gazebo
-           because they were sub-pixel displacements at warehouse scale. -->
-      <pose>0.0 0.0 0.1 0 0 0</pose>
+      <!-- Spawn at a validated open aisle in the warehouse.
+           (0,0) embedded the robot inside the Warehouse building's collision structure
+           (Warehouse model is at world origin), physically trapping it.
+           (11.5, -10.6, yaw=π) is the original MovAI-validated aisle position.
+           odom frame always resets relative to where the robot starts,
+           so navigation goals in odom space work correctly regardless of world coords. -->
+      <pose>11.5 -10.6 0.1 0 0 3.14159</pose>
     </include>
 
     <!-- Carts -->
