@@ -118,14 +118,28 @@ local_costmap:
       height: 8
       resolution: 0.08
       robot_radius: 0.30
-      plugins: ["terrain_layer", "inflation_layer"]
+      plugins: ["obstacle_layer", "inflation_layer"]
 
-      terrain_layer:
-        plugin: "nav2_costmap_2d::StaticLayer"
-        map_subscribe_transient_local: false
-        map_topic: "/terrain/traversability_grid"
-        subscribe_to_updates: false
-        footprint_clearing_enabled: true
+      # ObstacleLayer: real-time obstacle detection from camera point cloud.
+      # Subscribes to /perception/depth/points (from point_cloud_xyz_node using
+      # Depth Anything V2 monocular depth). As the robot moves, current camera
+      # observations mark/clear obstacle cells dynamically.
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: depth_camera
+        depth_camera:
+          topic: /perception/depth/points
+          data_type: PointCloud2
+          marking: true
+          clearing: true
+          max_obstacle_height: 2.5    # warehouse shelf height ~2m
+          min_obstacle_height: 0.05   # ignore floor points below 5cm
+          obstacle_range: 6.0         # mark obstacles within 6m camera range
+          raytrace_range: 8.0         # clear free space up to 8m
+          sensor_frame: ""            # use point cloud's own frame_id (camera_link_optical)
+          inf_is_valid: false
+          observation_persistence: 1.0  # keep observations 1s before clearing
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
