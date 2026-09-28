@@ -81,20 +81,26 @@ def generate_launch_description():
         name='rtabmap',
         output='screen',
         parameters=[rtabmap_config, {
-            'use_sim_time':        use_sim_time,
-            'frame_id':            'base_footprint',   # MUST match URDF base frame
-            'map_frame_id':        'map',
-            'odom_frame_id':       'odom',
-            'publish_tf':          True,               # publishes map→odom TF
-            'subscribe_rgbd':      True,
-            'subscribe_rgb':       False,
-            'subscribe_depth':     False,
-            'subscribe_scan':      False,
-            'approx_sync':         True,
-            'queue_size':          30,
-            'delete_db_on_start':  True,
-            'wait_for_transform':  1.0,
-            'tf_tolerance':        0.5,
+            'use_sim_time':              use_sim_time,
+            'frame_id':                  'base_footprint',   # MUST match URDF base frame
+            'map_frame_id':              'map',
+            'odom_frame_id':             'odom',
+            'publish_tf':                True,               # publishes map→odom TF
+            'subscribe_rgbd':            True,
+            'subscribe_rgb':             False,
+            'subscribe_depth':           False,
+            'subscribe_scan':            False,
+            'approx_sync':               True,
+            'queue_size':                30,
+            'delete_db_on_start':        True,
+            'wait_for_transform':        1.0,
+            'tf_tolerance':              0.5,
+            # Publish /map immediately at startup — do NOT wait for robot motion.
+            # These are rtabmap_ros ROS 2 wrapper params (not librtabmap RTAB params).
+            # map_always_update=true  → republish map on every SLAM iteration (~1 Hz)
+            # publish_null_when_empty → publish empty OccupancyGrid before first keyframe
+            'map_always_update':         True,
+            'publish_null_when_empty':   True,
         }],
         arguments=['-d'],  # delete DB on start (same as delete_db_on_start param)
         remappings=[

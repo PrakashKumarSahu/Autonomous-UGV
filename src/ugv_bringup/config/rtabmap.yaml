@@ -30,15 +30,16 @@ rtabmap:
     Mem/RehearsalSimilarity: "0.60"
     Mem/DepthCompressionFormat: ".png"
 
-    # Publish map frame immediately at startup — even before visual features are detected.
-    # Without this, RViz shows "No map received" for the first 30-60s (until SLAM localizes).
-    # map_always_update=true  → continuously re-publish map TF even when no new nodes added
-    # publish_null_when_empty → publish an empty OccupancyGrid on /map from frame 0
-    map_always_update: true
-    publish_null_when_empty: true
+    # Keyframe creation thresholds — set to 0 so first frame immediately creates a node.
+    # Without this, RTAB-Map waits for the robot to move RGBD/LinearUpdate (0.1m) before
+    # creating any keyframe → /map never published until robot moves → RViz "No map received".
+    # With 0.0, every processed frame can create a new node (rate-limited by Rtabmap/DetectionRate).
+    RGBD/LinearUpdate: "0.0"
+    RGBD/AngularUpdate: "0.0"
 
-    RGBD/LinearUpdate: "0.10"    # was 0.20 — build map on smaller movements (better coverage)
-    RGBD/AngularUpdate: "0.05"   # was 0.15 — map updates on small rotations too
+    # Create intermediate nodes (not just loop-closure nodes) for more frequent map updates
+    Rtabmap/CreateIntermediateNodes: "true"
+
     RGBD/ProximityBySpace: "false"
     RGBD/OptimizeFromGraphEnd: "false"
     RGBD/NeighborLinkRefining: "false"
