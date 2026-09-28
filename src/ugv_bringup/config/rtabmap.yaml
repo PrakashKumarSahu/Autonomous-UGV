@@ -32,8 +32,8 @@ rtabmap:
     subscribe_scan: false
     approx_sync: true
     queue_size: 20
-    wait_for_transform: 0.5
-    tf_tolerance: 0.3
+    wait_for_transform: 1.0   # was 0.5 — prevents frame drops during Gazebo startup
+    tf_tolerance: 0.5         # was 0.3 — more tolerant of TF latency spikes
 
     # Force 2D SLAM for planar ground UGV
     Reg/Force3DoF: "true"
@@ -55,17 +55,18 @@ rtabmap:
     Vis/MaxFeatures: "1000"
     Vis/MinInliers: "15"
 
-    # 2D Grid Map generation for Nav2
+    # 2D Grid Map generation for Nav2 — calibrated for real depth sensor (0.1-10 m)
     Grid/FromDepth: "true"
-    Grid/RangeMax: "15.0"
+    Grid/RangeMax: "10.0"     # was 15.0 — matches Gazebo depth sensor far clip
     Grid/RayTracing: "true"
     Grid/CellSize: "0.10"
     Grid/NormalsSegmentation: "false"
-    Grid/MaxGroundHeight: "0.12"
+    Grid/MaxGroundHeight: "0.15"   # was 0.12 — slightly higher for stability
     Grid/MaxObstacleHeight: "2.0"
     Grid/GroundIsObstacle: "false"
     Grid/NoiseFilteringRadius: "0.15"
     Grid/NoiseFilteringMinNeighbors: "5"
     GridGlobal/FootprintRadius: "0.55"
     GridGlobal/Eroded: "true"
+
 

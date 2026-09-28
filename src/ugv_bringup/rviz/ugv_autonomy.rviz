@@ -5,34 +5,27 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /RobotModel1
+        - /SLAMMap1
         - /LocalCostmap1
-        - /GlobalPlan1
         - /CameraDepthCloud1
       Splitter Ratio: 0.5
     Tree Height: 800
 Visualization Manager:
   Class: ""
   Displays:
+    # ── World Frame ────────────────────────────────────────────────────────────
     - Alpha: 0.5
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
       Enabled: true
-      Line Style:
-        Line Width: 0.03
-        Value: Lines
       Name: Grid
-      Normal Cell Count: 0
-      Offset:
-        X: 0
-        Y: 0
-        Z: 0
       Plane: XY
-      Plane Cell Count: 20
-      Reference Frame: <Fixed Frame>
+      Plane Cell Count: 30
+      Reference Frame: map
       Value: true
 
+    # ── Robot Model ────────────────────────────────────────────────────────────
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
       Description Topic:
@@ -45,6 +38,7 @@ Visualization Manager:
       Name: RobotModel
       Visual Enabled: true
 
+    # ── TF (disabled by default, enable for debugging) ─────────────────────────
     - Class: rviz_default_plugins/TF
       Enabled: false
       Frame Timeout: 15
@@ -55,9 +49,12 @@ Visualization Manager:
       Show Arrows: false
       Show Axes: true
       Show Names: false
-      Update Interval: 0
 
-    # ── SLAM Map (what RTAB-Map has built from camera observations) ──────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # NAVIGATION MAPS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # SLAM occupancy map — built from real depth camera as robot explores
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
       Color Scheme: map
@@ -70,10 +67,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /map
-      Use Timestamp: false
       Value: true
 
-    # ── Local Costmap (real-time obstacle detection from camera PointCloud) ──
+    # Local costmap — camera point cloud marks obstacles in real-time
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
@@ -86,10 +82,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /local_costmap/costmap
-      Use Timestamp: false
       Value: true
 
-    # ── Global Costmap ───────────────────────────────────────────────────────
+    # Global costmap — RTAB-Map /map projected into Nav2 global frame
     - Alpha: 0.3
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
@@ -102,10 +97,15 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /global_costmap/costmap
-      Use Timestamp: false
       Value: true
 
-    # ── Camera 3D Point Cloud (the depth data used for obstacle avoidance) ──
+    # ─────────────────────────────────────────────────────────────────────────
+    # POINT CLOUDS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Camera depth point cloud — what Nav2 uses for real-time obstacle avoidance
+    # In sim mode: from Gazebo real depth sensor (metric ground-truth)
+    # In hw mode:  from RealSense/ZED/Depth Anything (swappable)
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -113,14 +113,11 @@ Visualization Manager:
         Min Value: 0
         Value: true
       Axis: Z
-      Channel Name: intensity
       Class: rviz_default_plugins/PointCloud2
-      Color: 255; 100; 50
+      Color: 255; 120; 30
       Color Transformer: FlatColor
-      Decay Time: 0.2
+      Decay Time: 0.3
       Enabled: true
-      Max Color: 255; 255; 255
-      Min Color: 0; 0; 0
       Name: CameraDepthCloud
       Position Transformer: XYZ
       Size (m): 0.04
@@ -133,7 +130,7 @@ Visualization Manager:
         Value: /perception/depth/points
       Value: true
 
-    # ── RTAB-Map 3D Cloud (what has been mapped so far) ─────────────────────
+    # RTAB-Map 3D accumulated cloud — the map being built from real depth
     - Alpha: 0.8
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -158,24 +155,16 @@ Visualization Manager:
         Value: /rtabmap/cloud_map
       Value: true
 
-    # ── Nav2 Path ────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # NAVIGATION PATHS
+    # ─────────────────────────────────────────────────────────────────────────
+
     - Class: rviz_default_plugins/Path
       Color: 0; 255; 0
       Enabled: true
-      Head Diameter: 0.3
-      Head Length: 0.2
-      Length: 0.3
       Line Style: Lines
       Line Width: 0.05
       Name: GlobalPlan
-      Offset:
-        X: 0
-        Y: 0
-        Z: 0
-      Pose Style: None
-      Radius: 0.03
-      Shaft Diameter: 0.1
-      Shaft Length: 0.1
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -184,14 +173,13 @@ Visualization Manager:
         Value: /plan
       Value: true
 
-    # ── Odometry trail ───────────────────────────────────────────────────────
     - Class: rviz_default_plugins/Odometry
       Angle Tolerance: 0.1
       Color: 255; 255; 0
       Enabled: true
       Keep: 200
       Length: 0.3
-      Name: FilteredOdometry
+      Name: OdometryTrail
       Position Tolerance: 0.1
       Topic:
         Depth: 5
@@ -201,7 +189,12 @@ Visualization Manager:
         Value: /odometry/filtered
       Value: true
 
-    # ── Camera Image Feeds ───────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # CAMERA FEEDS
+    # Best Effort QoS required — Gazebo bridge publishes fire-and-forget
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # RGB camera from Gazebo (or real camera in hw mode)
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -217,21 +210,23 @@ Visualization Manager:
         Value: /camera/image_raw
       Value: true
 
+    # Real depth from Gazebo sensor (or relay in hw mode) — metric 32FC1
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Max Value: 1
+      Max Value: 10
       Median window: 5
       Min Value: 0
-      Name: DepthEstimation
+      Name: RealDepth (Gazebo sensor / hw relay)
       Normalize Range: true
       Topic:
         Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
+        Reliability Policy: Reliable
         Value: /perception/depth/image_raw
       Value: true
 
+    # YOLO segmentation overlay — hazard detection visualization
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -245,6 +240,23 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /perception/yolo/overlay
+      Value: true
+
+    # AI Depth visualization (only visible when enable_depth_viz:=true)
+    # Shows Depth Anything V3 estimate — compare with RealDepth above
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 10
+      Median window: 5
+      Min Value: 0
+      Name: AIDepth (Depth Anything V3 — enable_depth_viz:=true)
+      Normalize Range: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /perception/depth_ai/image_raw
       Value: true
 
   Enabled: true
@@ -268,7 +280,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 15.0
+      Distance: 12.0
       Focal Point:
         X: 0.0
         Y: 0.0
@@ -277,7 +289,7 @@ Visualization Manager:
       Focal Shape Type: Sphere
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 0.8
+      Pitch: 0.75
       Target Frame: base_footprint
       Value: Orbit (rviz)
       Yaw: 3.14

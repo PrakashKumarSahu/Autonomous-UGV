@@ -10,6 +10,24 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
+# ── Real Depth Camera (metric, 32FC1, 0.1-10 m) ──────────────────────────────
+# The Tugbot SDF has a native depth_camera sensor. This is the ground-truth
+# depth for simulation. depth_relay_node re-publishes this on
+# /perception/depth/image_raw with frame_id=camera_link_optical.
+- ros_topic_name: "/camera/depth/image_raw"
+  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/depth/camera_info"
+  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+
+
 - ros_topic_name: "/imu/data"
   gz_topic_name: "/world/world_demo/model/tugbot/link/imu_link/sensor/imu/imu"
   ros_type_name: "sensor_msgs/msg/Imu"

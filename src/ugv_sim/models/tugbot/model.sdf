@@ -142,8 +142,8 @@
             <pose relative_to="base_link">0.0553 0 0.4323 0 0 0</pose>
             <sensor name="color" type="camera">
                 <pose>0 0.0325 0.0125 0 0 0</pose>
-                <update_rate>6</update_rate>
-                <always_on>0</always_on>
+                <update_rate>15</update_rate>
+                <always_on>1</always_on>
                 <camera>
                     <horizontal_fov>1.20427718</horizontal_fov>
                     <image>
@@ -167,8 +167,8 @@
             </sensor>
             <sensor name="depth" type="depth_camera">
                 <pose>0 0.0175 0.0125 0 0 0</pose>
-                <update_rate>6</update_rate>
-                <always_on>0</always_on>
+                <update_rate>15</update_rate>
+                <always_on>1</always_on>
                 <camera>
                     <horizontal_fov>1.51843645</horizontal_fov>
                     <image>
