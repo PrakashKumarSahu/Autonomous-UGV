@@ -95,12 +95,12 @@ def generate_launch_description():
             'delete_db_on_start':        True,
             'wait_for_transform':        1.0,
             'tf_tolerance':              0.5,
-            # Publish /map immediately at startup — do NOT wait for robot motion.
-            # These are rtabmap_ros ROS 2 wrapper params (not librtabmap RTAB params).
-            # map_always_update=true  → republish map on every SLAM iteration (~1 Hz)
-            # publish_null_when_empty → publish empty OccupancyGrid before first keyframe
+            # Publish /map on every SLAM iteration — do NOT wait for robot motion.
+            # map_always_update: True → republish /map at ~1 Hz even between loop closures.
+            # Verified working: ros2 param get /rtabmap map_always_update → True.
+            # publish_null_when_empty is NOT a valid rtabmap_ros param (silently ignored).
+            # RGBD/LinearUpdate=0.0 in rtabmap.yaml ensures first keyframe on first frame.
             'map_always_update':         True,
-            'publish_null_when_empty':   True,
         }],
         arguments=['-d'],  # delete DB on start (same as delete_db_on_start param)
         remappings=[
