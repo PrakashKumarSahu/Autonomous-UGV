@@ -4,11 +4,11 @@
 Subscribes:
   - /perception/depth/points (sensor_msgs/msg/PointCloud2)
   - /perception/hazard_mask (sensor_msgs/msg/Image)
+  - /perception/depth/camera_info (sensor_msgs/msg/CameraInfo) — live intrinsics
 Publishes:
   - /terrain/traversability_grid (nav_msgs/msg/OccupancyGrid)
 """
 
-import math
 import numpy as np
 import cv2
 from cv_bridge import CvBridge
@@ -21,8 +21,6 @@ from sensor_msgs.msg import PointCloud2, Image
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from geometry_msgs.msg import Pose, Point, Quaternion
 import sensor_msgs_py.point_cloud2 as pc2
-
-import tf2_ros
 
 
 class TerrainAnalysisNode(Node):
@@ -64,9 +62,14 @@ class TerrainAnalysisNode(Node):
         self.bridge = CvBridge()
         self.latest_hazard_mask = None
 
-        # TF Buffer & Listener
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        # Camera intrinsics — populated from /perception/depth/camera_info at runtime.
+        # Default values are the Gazebo depth camera intrinsics (848×480, FOV~87°).
+        # These are overwritten by the first camera_info message received, so ANY
+        # depth source (RealSense, ZED, Depth Anything V3) self-calibrates automatically.
+        self.fx = 421.62   # pixels — updated from camera_info K[0]
+        self.fy = 421.62   # pixels — updated from camera_info K[4]
+        self.cx = 422.29   # pixels — updated from camera_info K[2]
+        self.cy = 236.57   # pixels — updated from camera_info K[5]
 
         # QoS
         sensor_qos = QoSProfile(
@@ -90,9 +93,30 @@ class TerrainAnalysisNode(Node):
             sensor_qos
         )
 
+        # Subscribe to camera_info to get real intrinsics (fx,fy,cx,cy) dynamically.
+        # Fixes: was hardcoded to fx=616.0 which is wrong for Gazebo depth cam (fx≈421).
+        # Uses Reliable QoS since depth_relay_node publishes camera_info as Reliable.
+        from sensor_msgs.msg import CameraInfo as CameraInfoMsg
+        from rclpy.qos import QoSProfile as _QoS, ReliabilityPolicy as _Rel, HistoryPolicy as _HP
+        reliable_qos = _QoS(reliability=_Rel.RELIABLE, history=_HP.KEEP_LAST, depth=1)
+        self.info_sub = self.create_subscription(
+            CameraInfoMsg,
+            '/perception/depth/camera_info',
+            self._camera_info_cb,
+            reliable_qos
+        )
+
         # Publisher
         self.grid_pub = self.create_publisher(OccupancyGrid, self.output_grid_topic, 10)
         self.get_logger().info('Terrain Traversability Analysis Node active.')
+
+    def _camera_info_cb(self, msg) -> None:
+        """Update camera intrinsics from live camera_info (auto-calibrates to any depth source)."""
+        k = msg.k  # row-major 3×3 intrinsic matrix
+        self.fx = k[0]
+        self.fy = k[4]
+        self.cx = k[2]
+        self.cy = k[5]
 
     def mask_callback(self, msg: Image):
         try:
@@ -142,21 +166,18 @@ class TerrainAnalysisNode(Node):
         gy = grid_y[valid_idx]
         gz = rz[valid_idx]
 
-        # Compute min and max height per cell using bincount or 2D accumulation
+        # Compute min and max height per cell — vectorized with numpy ufuncs.
+        # np.minimum.at / maximum.at / add.at are ~10-100x faster than Python for-loops
+        # on typical depth camera point clouds (50k+ points at step=4).
         # Initialize grid layers
         min_elev = np.full((self.num_cells_y, self.num_cells_x), np.inf, dtype=np.float32)
         max_elev = np.full((self.num_cells_y, self.num_cells_x), -np.inf, dtype=np.float32)
         counts = np.zeros((self.num_cells_y, self.num_cells_x), dtype=np.int32)
 
-        for i in range(len(gx)):
-            xi = gx[i]
-            yi = gy[i]
-            zi = gz[i]
-            if zi < min_elev[yi, xi]:
-                min_elev[yi, xi] = zi
-            if zi > max_elev[yi, xi]:
-                max_elev[yi, xi] = zi
-            counts[yi, xi] += 1
+        flat_idx = gy * self.num_cells_x + gx
+        np.minimum.at(min_elev.ravel(), flat_idx, gz)
+        np.maximum.at(max_elev.ravel(), flat_idx, gz)
+        np.add.at(counts.ravel(), flat_idx, 1)
 
         observed = counts > 0
         diff_elev = np.zeros_like(min_elev)
@@ -177,10 +198,12 @@ class TerrainAnalysisNode(Node):
         costmap[center_y - footprint_cells:center_y + footprint_cells + 1,
                 center_x - footprint_cells:center_x + footprint_cells + 1] = 0
 
-        # Integrate YOLO hazard mask if available via geometric back-projection
+        # Integrate YOLO hazard mask if available via geometric back-projection.
+        # Uses live camera intrinsics (self.fx/fy/cx/cy) from /perception/depth/camera_info.
+        # Previously hardcoded fx=616.0 which was wrong for the Gazebo depth cam (fx≈421).
         if self.latest_hazard_mask is not None:
             mh, mw = self.latest_hazard_mask.shape[:2]
-            fx, fy, cx, cy = 616.0, 616.0, float(mw) / 2.0, float(mh) / 2.0
+            fx, fy, cx, cy = self.fx, self.fy, self.cx, self.cy
             
             valid_pts = pts[valid_idx]
             cam_z = valid_pts[:, 2]

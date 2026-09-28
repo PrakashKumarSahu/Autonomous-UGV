@@ -23,7 +23,6 @@ def generate_launch_description():
         name='ekf_filter_node',
         output='screen',
         parameters=[ekf_config, {'use_sim_time': use_sim_time}],
-        remappings=[('odometry/filtered', '/odometry/filtered')],
         condition=IfCondition(EqualsSubstitution(mode, 'hw'))
     )
 

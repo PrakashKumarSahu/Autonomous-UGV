@@ -1,24 +1,9 @@
-rgbd_odometry:
-  ros__parameters:
-    frame_id: "base_footprint"
-    odom_frame_id: "rtabmap_odom"
-    publish_tf: false
-    subscribe_rgbd: true
-    subscribe_rgb: false
-    subscribe_depth: false
-    approx_sync: true
-    queue_size: 20
-
-    # Visual Odometry Parameters (FAST / ORB / GFTT)
-    Reg/Force3DoF: "true"
-    Odom/Holonomic: "false"
-    Vis/FeatureType: "8"  # 8=FAST/ORB (High FPS)
-    Vis/MaxFeatures: "1000"
-    Vis/MinInliers: "15"
-
-    # RGB-D Virtual Camera Odometry
-    Odom/Strategy: "0"  # Frame-to-Map or Frame-to-Frame
-    Odom/ResetCountdown: "1"
+# rtabmap.yaml — RTAB-Map Visual SLAM configuration
+# Applied to the 'rtabmap' node in localization.launch.py.
+# Parameters set here can be overridden by explicit parameters in the launch file.
+#
+# NOTE: The 'rgbd_odometry' section has been removed — that node is not launched.
+# RTAB-Map uses wheel odometry from /odometry/filtered (Gazebo DiffDrive) via TF.
 
 rtabmap:
   ros__parameters:

@@ -131,11 +131,12 @@ def generate_launch_description():
         executable='yolo_seg_node',
         name='yolo_seg_node',
         parameters=[{
-            'use_sim_time':        use_sim_time,
-            'input_image_topic':   '/camera/image_raw',
-            'output_mask_topic':   '/perception/hazard_mask',
-            'model_name':          'yolov8n-seg.pt',
-            'confidence_threshold': 0.35,
+            'use_sim_time':          use_sim_time,
+            'input_image_topic':     '/camera/image_raw',
+            'output_mask_topic':     '/perception/hazard_mask',
+            'output_overlay_topic':  '/perception/yolo/overlay',  # RViz visualization
+            'model_name':            'yolov8n-seg.pt',
+            'confidence_threshold':  0.35,
         }],
         output='screen'
     )

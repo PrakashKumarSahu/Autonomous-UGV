@@ -151,7 +151,9 @@ class YoloHazardSegmentationNode(Node):
                 self.get_logger().error(f'YOLO inference error: {e}')
                 hazard_mask.fill(0)
         else:
-            hazard_mask.fill(0)
+            # YOLO model unavailable — use Canny edge-based fallback detector.
+            # Provides basic obstacle boundaries (edges → hazard regions) without GPU.
+            hazard_mask = self.fallback_hazard_detection(cv_image)
 
         # Publish hazard mask (mono8)
         mask_msg = self.bridge.cv2_to_imgmsg(hazard_mask, encoding='mono8')

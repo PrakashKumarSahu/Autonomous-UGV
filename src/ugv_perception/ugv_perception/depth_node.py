@@ -86,7 +86,16 @@ class DepthEstimationNode(Node):
 
         # Publishers
         self.depth_pub = self.create_publisher(Image, self.output_depth_topic, 10)
-        self.depth_info_pub = self.create_publisher(CameraInfo, '/perception/depth/camera_info', 10)
+        # Derive camera_info topic from depth topic by replacing the /image_raw suffix.
+        # This prevents conflict when running as depth_viz_node (output=/perception/depth_ai/image_raw)
+        # alongside depth_relay_node (output=/perception/depth/image_raw) — they each
+        # publish to their own separate camera_info topic.
+        depth_info_topic = self.output_depth_topic.replace('/image_raw', '/camera_info')
+        if depth_info_topic == self.output_depth_topic:
+            # Fallback if topic doesn't end with /image_raw
+            depth_info_topic = self.output_depth_topic.rstrip('/') + '_camera_info'
+        self.depth_info_pub = self.create_publisher(CameraInfo, depth_info_topic, 10)
+        self.get_logger().info(f'  camera_info → {depth_info_topic}')
         if self.publish_pointcloud:
             self.points_pub = self.create_publisher(PointCloud2, self.output_points_topic, 10)
 
