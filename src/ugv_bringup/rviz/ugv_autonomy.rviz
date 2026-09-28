@@ -8,6 +8,7 @@ Panels:
         - /SLAMMap1
         - /LocalCostmap1
         - /CameraDepthCloud1
+        - /RGBCamera1
       Splitter Ratio: 0.5
     Tree Height: 800
 Visualization Manager:
@@ -22,7 +23,7 @@ Visualization Manager:
       Name: Grid
       Plane: XY
       Plane Cell Count: 30
-      Reference Frame: map
+      Reference Frame: <Fixed Frame>
       Value: true
 
     # ── Robot Model ────────────────────────────────────────────────────────────
@@ -54,7 +55,8 @@ Visualization Manager:
     # NAVIGATION MAPS
     # ─────────────────────────────────────────────────────────────────────────
 
-    # SLAM occupancy map — built from real depth camera as robot explores
+    # SLAM occupancy map — built from real depth camera as robot explores.
+    # Uses Transient Local QoS so late-joining RViz always gets latest map.
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
       Color Scheme: map
@@ -191,10 +193,16 @@ Visualization Manager:
 
     # ─────────────────────────────────────────────────────────────────────────
     # CAMERA FEEDS
-    # Best Effort QoS required — Gazebo bridge publishes fire-and-forget
+    # IMPORTANT QoS notes:
+    #   - /camera/image_raw and /camera/depth/image_raw come from Gazebo bridge
+    #     → MUST use Best Effort (Gazebo bridge publishes fire-and-forget)
+    #   - /perception/depth/image_raw comes from depth_relay_node → Reliable
+    #   - /perception/yolo/overlay comes from yolo_seg_node → Reliable
+    #   - /perception/depth_ai/image_raw comes from depth_node → Reliable
     # ─────────────────────────────────────────────────────────────────────────
 
     # RGB camera from Gazebo (or real camera in hw mode)
+    # BEST_EFFORT — Gazebo bridge publishes BestEffort, Reliable sub = no data
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -210,7 +218,9 @@ Visualization Manager:
         Value: /camera/image_raw
       Value: true
 
-    # Real depth from Gazebo sensor (or relay in hw mode) — metric 32FC1
+    # Real depth from Gazebo sensor relayed by depth_relay_node (32FC1, 0.1–10 m)
+    # Min 0 / Max 10 shows full depth range; Normalize Range maps 0m=black, 10m=white
+    # RELIABLE — depth_relay_node re-publishes as Reliable (QoS bridge from BestEffort Gz)
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 10
@@ -227,6 +237,7 @@ Visualization Manager:
       Value: true
 
     # YOLO segmentation overlay — hazard detection visualization
+    # RELIABLE — yolo_seg_node publishes Reliable (CPU/GPU node, not Gazebo bridge)
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -238,12 +249,13 @@ Visualization Manager:
         Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
+        Reliability Policy: Reliable
         Value: /perception/yolo/overlay
       Value: true
 
     # AI Depth visualization (only visible when enable_depth_viz:=true)
     # Shows Depth Anything V3 estimate — compare with RealDepth above
+    # RELIABLE — depth_node (Depth Anything V3) publishes Reliable
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 10
@@ -262,7 +274,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
