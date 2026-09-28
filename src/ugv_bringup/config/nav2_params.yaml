@@ -21,7 +21,7 @@ controller_server:
     odom_topic: /odometry/filtered
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
+    min_y_velocity_threshold: 0.001   # diff-drive: Y is always ~0, use small threshold
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
@@ -122,8 +122,8 @@ local_costmap:
 
       # ObstacleLayer: real-time obstacle detection from camera point cloud.
       # Subscribes to /perception/depth/points (from point_cloud_xyz_node using
-      # Depth Anything V2 monocular depth). As the robot moves, current camera
-      # observations mark/clear obstacle cells dynamically.
+      # real Gazebo depth sensor in sim / RealSense or ZED in hw mode).
+      # As the robot moves, current camera observations mark/clear obstacle cells dynamically.
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
