@@ -12,6 +12,10 @@
     <plugin name='ignition::gazebo::systems::SceneBroadcaster' filename='libignition-gazebo-scene-broadcaster-system.so'/>
     <plugin name='ignition::gazebo::systems::Imu' filename='ignition-gazebo-imu-system'/>
     <plugin name='ignition::gazebo::systems::Sensors' filename='ignition-gazebo-sensors-system'>
+      <!-- ogre2 is required for depth_camera sensors in Gazebo Harmonic.
+           The libEGL DRI2 warnings are from Mesa's EGL fallback path and are harmless;
+           NVIDIA EGL handles actual rendering. Do NOT use ogre (v1) — it does not
+           support depth_camera sensor type in Gazebo Harmonic. -->
       <render_engine>ogre2</render_engine>
     </plugin>
 
@@ -33,20 +37,8 @@
         <camera_pose>9.5 -10.6 3.5 0 0.5 0.1</camera_pose>
       </plugin>
 
-      <!-- Entity tracker: keeps camera following the Tugbot so navigation is visible -->
-      <plugin filename="FollowEntity" name="Follow Entity">
-        <ignition-gui>
-          <property type="bool" key="showTitleBar">false</property>
-          <property type="string" key="state">floating</property>
-          <property type="double" key="width">200</property>
-          <property type="double" key="height">50</property>
-          <property type="double" key="z">2</property>
-          <anchors target="3D View">
-            <line own="right" target="right"/>
-            <line own="top" target="top"/>
-          </anchors>
-        </ignition-gui>
-      </plugin>
+      <!-- FollowEntity GUI plugin removed — not available in Gazebo Harmonic.
+           Use the Entity Tree panel in Gazebo GUI to manually track the robot. -->
 
 
       <!-- World control -->

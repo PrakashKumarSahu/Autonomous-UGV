@@ -14,8 +14,12 @@
 # The Tugbot SDF has a native depth_camera sensor. This is the ground-truth
 # depth for simulation. depth_relay_node re-publishes this on
 # /perception/depth/image_raw with frame_id=camera_link_optical.
+#
+# IMPORTANT: Gazebo Harmonic depth_camera sensors publish on 'depth_image' topic
+# (not 'image'). Verified with: gz topic -l | grep depth
+# Actual GZ topics: .../sensor/depth/depth_image  and .../sensor/depth/camera_info
 - ros_topic_name: "/camera/depth/image_raw"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/image"
+  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/depth_image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
