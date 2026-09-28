@@ -95,7 +95,7 @@ Visualization Manager:
       Name: GlobalCostmap
       Topic:
         Depth: 5
-        Durability Policy: Transient Local
+        Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /global_costmap/costmap

@@ -26,11 +26,18 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from sensor_msgs.msg import JointState
 
 
-# Mapping: SDF joint name (from Gazebo/Fuel model) -> URDF joint name
+# Mapping: SDF joint name (from Gazebo/Fuel model) -> URDF joint name.
+# ONLY joints listed here are forwarded to robot_state_publisher.
+# All other joints (gripper_joint, gripper_hand_joint, warnign_light_joint, etc.)
+# are silently dropped — RSP has no URDF entries for them and would log repeated
+# "unknown joint" errors at ~50 Hz, causing RViz flickering (robot blinks white).
 SDF_TO_URDF_JOINT_MAP = {
     'wheel_left_joint':  'left_wheel_joint',
     'wheel_right_joint': 'right_wheel_joint',
 }
+
+# Set of URDF-known output names (used for fast O(1) lookup)
+URDF_KNOWN_JOINTS = set(SDF_TO_URDF_JOINT_MAP.values())
 
 
 class JointStateRelayNode(Node):
@@ -77,7 +84,13 @@ class JointStateRelayNode(Node):
         out.header = msg.header
 
         for i, name in enumerate(msg.name):
-            urdf_name = SDF_TO_URDF_JOINT_MAP.get(name, name)
+            urdf_name = SDF_TO_URDF_JOINT_MAP.get(name, None)
+            # Drop joints that have no mapping to a URDF joint.
+            # Gazebo publishes gripper_joint, gripper_hand_joint, warnign_light_joint,
+            # etc. — none of these exist in ugv_base.urdf.xacro. Passing them to RSP
+            # causes "unknown joint" warnings at 50 Hz → RViz robot blinks white.
+            if urdf_name is None:
+                continue
             out.name.append(urdf_name)
             if i < len(msg.position):
                 out.position.append(msg.position[i])
@@ -86,7 +99,9 @@ class JointStateRelayNode(Node):
             if i < len(msg.effort):
                 out.effort.append(msg.effort[i])
 
-        self.pub.publish(out)
+        # Only publish if we have at least one valid wheel joint
+        if out.name:
+            self.pub.publish(out)
 
 
 def main(args=None):

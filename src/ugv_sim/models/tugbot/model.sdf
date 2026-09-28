@@ -126,16 +126,13 @@
                 <cast_shadows>1</cast_shadows>
             </light>
         </link>
-        <joint name="warnign_light_joint" type="revolute">
+        <!-- Warning light joint: changed from revolute (spinning at 10 rad/s) to fixed.
+             The spinning was causing continuous high-frequency TF updates that made
+             RViz flicker (robot model alternated between white/colored). The light
+             stays visible as a static decoration. Not needed for navigation prototype. -->
+        <joint name="warnign_light_joint" type="fixed">
             <child>warnign_light</child>
             <parent>base_link</parent>
-            <axis>
-                <xyz>0 0 1</xyz>
-                <limit>
-                    <effort>1000</effort>
-                    <velocity>20.0</velocity>
-                </limit>
-            </axis>
         </joint>
         <!-- SENSORS -->
         <link name="camera_front">
@@ -928,10 +925,8 @@
             <publish_nested_model_pose>true</publish_nested_model_pose>
             <update_frequency>20</update_frequency>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-controller-system" name="ignition::gazebo::systems::JointController">
-            <joint_name>warnign_light_joint</joint_name>
-            <initial_velocity>10.0</initial_velocity>
-        </plugin>
+        <!-- warnign_light_joint JointController removed: joint is now fixed type,
+             velocity controller has no effect and caused physics solver warnings. -->
         <plugin filename="ignition-gazebo-linearbatteryplugin-system" name="ignition::gazebo::systems::LinearBatteryPlugin">
             <battery_name>linear_battery</battery_name>
             <voltage>24.592</voltage>

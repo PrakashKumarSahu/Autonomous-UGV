@@ -29,8 +29,16 @@ rtabmap:
     Mem/InitWMWithAllNodes: "false"
     Mem/RehearsalSimilarity: "0.60"
     Mem/DepthCompressionFormat: ".png"
-    RGBD/LinearUpdate: "0.20"
-    RGBD/AngularUpdate: "0.15"
+
+    # Publish map frame immediately at startup — even before visual features are detected.
+    # Without this, RViz shows "No map received" for the first 30-60s (until SLAM localizes).
+    # map_always_update=true  → continuously re-publish map TF even when no new nodes added
+    # publish_null_when_empty → publish an empty OccupancyGrid on /map from frame 0
+    map_always_update: true
+    publish_null_when_empty: true
+
+    RGBD/LinearUpdate: "0.10"    # was 0.20 — build map on smaller movements (better coverage)
+    RGBD/AngularUpdate: "0.05"   # was 0.15 — map updates on small rotations too
     RGBD/ProximityBySpace: "false"
     RGBD/OptimizeFromGraphEnd: "false"
     RGBD/NeighborLinkRefining: "false"
