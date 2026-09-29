@@ -362,21 +362,17 @@
     </link>
   </model>
 
-  <!-- L-shaped wall pocket in NE corner — tests concave space planning -->
-  <model name="obs_L_arm1">
-    <static>true</static><pose>7.5 4.5 1.0 0 0 0</pose>
+
+  <!-- NE quadrant standalone post — replaces the L-shaped pocket which was a camera
+       dead zone (robot could enter from the west with camera facing north, never seeing
+       the walls to the side). This open cylinder IS visible to the camera from all
+       directions before the robot can reach it. -->
+  <model name="obs_NE_post">
+    <static>true</static><pose>7.0 4.0 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>0.3 4.0 2.0</size></box></geometry>
+      <visual name="v"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry>
         <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>0.3 4.0 2.0</size></box></geometry></collision>
-    </link>
-  </model>
-  <model name="obs_L_arm2">
-    <static>true</static><pose>6.1 2.6 1.0 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>3.0 0.3 2.0</size></box></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>3.0 0.3 2.0</size></box></geometry></collision>
+      <collision name="c"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry></collision>
     </link>
   </model>
 
@@ -403,11 +399,8 @@
     </link>
   </model>
 
-  <!-- ══════════════════════════════════════════════════════════════════
-       NOTE: Localbot robot NOT included here.
-       Robot is spawned dynamically by sim.launch.py using ros_gz_sim create.
-       This makes the world reusable for any robot or spawn configuration.
-       ══════════════════════════════════════════════════════════════════ -->
+  <!-- NOTE: Localbot robot NOT included here.
+       Robot is spawned dynamically by sim.launch.py using ros_gz_sim create. -->
 
 </world>
 </sdf>

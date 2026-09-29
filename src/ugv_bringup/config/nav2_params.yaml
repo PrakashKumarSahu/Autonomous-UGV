@@ -1,3 +1,37 @@
+# nav2_params.yaml — Autonomous UGV Navigation Configuration
+#
+# KEY DESIGN DECISIONS:
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. movement_time_allowance: 8.0s (was 25.0)
+#    → Detect stuck state in 8 seconds. Robot moving at 0.5m/s must cover at
+#      least 0.30m in 8s. If blocked by a wall, this triggers recovery quickly.
+#    → After recovery fails (spin + backup + wait), Nav2 cancels the goal and
+#      reports FAILED. The robot stops and holds position.
+#
+# 2. failure_tolerance: 0.5 (was 1.0)
+#    → Controller/TF errors are tolerated for 0.5s before the controller server
+#      reports failure to the BT navigator. Lower = fail faster on real errors.
+#
+# 3. use_collision_detection: true (was false)
+#    → RPP checks if the current path segment will intersect with costmap
+#      obstacles. If it would, it stops and triggers replanning rather than
+#      driving into the wall. This is the primary defense against driving into
+#      walls that weren't mapped by SLAM.
+#    → Was disabled previously because noisy depth clouds caused phantom stops.
+#      Now safe because: inflation_radius=0.75m keeps the robot far from walls,
+#      observation_persistence=0.5s clears transient noise quickly.
+#
+# 4. inflation_radius: 0.75m (was 0.55m local / 0.60m global)
+#    → Robot (radius 0.30m) gets a 0.45m safety margin around every obstacle.
+#    → Total clearance from any wall surface: 0.30 + 0.45 = 0.75m.
+#    → Prevents the robot from getting physically close enough to walls that
+#      the front-facing camera can't detect them.
+#
+# 5. desired_linear_vel: 0.4m/s (was 0.5m/s)
+#    → Slower speed = more time to react when an undetected obstacle appears.
+#    → Reduces distance traveled before RPP collision detection triggers.
+# ─────────────────────────────────────────────────────────────────────────────
+
 bt_navigator:
   ros__parameters:
     use_sim_time: true
@@ -21,12 +55,12 @@ controller_server:
     odom_topic: /odometry/filtered
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.001   # diff-drive: Y is always ~0, use small threshold
+    min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
-    # Increased from 0.3 → 1.0: Gazebo sim-clock jumps at startup and RTAB-Map
-    # publishes map→odom TF at only 1 Hz. Brief TF lookup failures lasting <0.3s
-    # were triggering controller failure and aborting navigation entirely.
-    failure_tolerance: 1.0
+    # 0.5s tolerance: fail faster when TF/costmap errors occur, triggering
+    # recovery behaviors sooner. Was 1.0 (too long, robot kept trying to drive
+    # into walls during the 1s window of tolerated failures).
+    failure_tolerance: 0.5
     progress_checker_plugin: "progress_checker"
     current_progress_checker: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
@@ -35,10 +69,12 @@ controller_server:
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.15
-      # Increased from 15.0 → 25.0: robot may pause during replanning or while
-      # waiting for stale costmap obstacles to clear. 15s was too tight.
-      movement_time_allowance: 25.0
+      # Robot must move 0.30m in 8s or Nav2 declares it stuck and tries recovery.
+      # At 0.4m/s desired speed: 0.30m should take <1s under normal conditions.
+      # This quickly catches the case where the robot is physically blocked (wheel
+      # spin but no translation due to wall contact causing odometry drift).
+      required_movement_radius: 0.30
+      movement_time_allowance: 8.0
 
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -49,26 +85,28 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.5
+      # Reduced from 0.5 → 0.4: more time to react to detected obstacles
+      desired_linear_vel: 0.4
       lookahead_dist: 0.8
-      min_lookahead_dist: 0.45
-      max_lookahead_dist: 1.6
+      min_lookahead_dist: 0.40
+      max_lookahead_dist: 1.4
       lookahead_time: 1.2
       stateful: false
       rotate_to_heading_angular_vel: 0.8
-      # Increased from 0.5 → 1.0: must match costmap transform_tolerance (1.0) to
-      # prevent TF lookup failures when RTAB-Map's 1Hz map→odom update is pending.
+      # Must match RTAB-Map 1Hz TF publish rate to prevent TF lookup failures
       transform_tolerance: 1.0
       max_robot_pose_search_dist: 5.0
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.8
       use_interpolation: true
-      # Disabled collision detection: the costmap (ObstacleLayer + InflationLayer)
-      # already prevents collisions. Enabling RPP's own collision checker caused
-      # phantom stops from noisy depth point cloud data — the robot would stop even
-      # when the path was actually clear, then fail to recover within failure_tolerance.
-      use_collision_detection: false
+      # ENABLED: RPP now checks if the current path will collide with costmap
+      # obstacles. Stops and triggers replanning when a wall is detected ahead.
+      # This is the primary safeguard when SLAM has not mapped an obstacle yet
+      # (e.g. a wall the camera has not seen from the current approach angle).
+      # Safe to enable because: inflation_radius=0.75m keeps robot far from walls,
+      # so real obstacle cells are in the costmap well before proximity collision.
+      use_collision_detection: true
       use_regulated_linear_velocity_scaling: true
       use_cost_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.9
@@ -127,13 +165,9 @@ local_costmap:
       width: 8
       height: 8
       resolution: 0.08
-      robot_radius: 0.30
+      robot_radius: 0.32
       plugins: ["obstacle_layer", "inflation_layer"]
 
-      # ObstacleLayer: real-time obstacle detection from camera point cloud.
-      # Subscribes to /perception/depth/points (from point_cloud_xyz_node using
-      # real Gazebo depth sensor in sim / RealSense or ZED in hw mode).
-      # As the robot moves, current camera observations mark/clear obstacle cells dynamically.
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -143,22 +177,24 @@ local_costmap:
           data_type: PointCloud2
           marking: true
           clearing: true
-          max_obstacle_height: 2.5    # warehouse shelf height ~2m
-          min_obstacle_height: 0.05   # ignore floor points below 5cm
-          obstacle_range: 6.0         # mark obstacles within 6m camera range
-          raytrace_range: 7.0         # clear free space up to 7m (slightly beyond mark range)
-          sensor_frame: ""            # use point cloud's own frame_id (camera_link_optical)
+          max_obstacle_height: 2.5
+          min_obstacle_height: 0.05
+          obstacle_range: 6.0
+          raytrace_range: 7.0
+          sensor_frame: ""
           inf_is_valid: false
-          # Reduced from 1.0 → 0.5: clears stale obstacles faster as robot turns.
-          # The front-facing camera can't see sideways. With 1.0s persistence,
-          # obstacles from the robot's previous orientation stayed too long, causing
-          # the planner to see a blocked path when it was actually clear.
+          # 0.5s: clears stale obstacles quickly as the robot turns and the
+          # front-facing camera's field of view sweeps across previously blocked areas.
           observation_persistence: 0.5
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.5
-        inflation_radius: 0.55
+        # Increased from 0.55 → 0.75m: robot (r=0.32m) gets 0.43m safety margin.
+        # Total wall clearance in planned paths: 0.32 + 0.43 = 0.75m from wall surface.
+        # This ensures the planner routes the robot far enough from walls that the
+        # front-facing camera sees any obstacle before the robot reaches it.
+        cost_scaling_factor: 2.5
+        inflation_radius: 0.75
 
 global_costmap:
   global_costmap:
@@ -169,7 +205,7 @@ global_costmap:
       robot_base_frame: base_footprint
       use_sim_time: true
       transform_tolerance: 1.0
-      robot_radius: 0.30
+      robot_radius: 0.32
       resolution: 0.10
       track_unknown_space: true
       rolling_window: false
@@ -188,11 +224,7 @@ global_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.5
-        inflation_radius: 0.60
-
-
-# velocity_smoother is intentionally not launched in this stack.
-# The RegulatedPurePursuitController handles velocity smoothing internally
-# via max_angular_accel and approach_velocity_scaling_dist parameters.
-
+        # Increased from 0.60 → 0.75m: consistent with local costmap.
+        # Global planner routes 0.75m away from any mapped wall surface.
+        cost_scaling_factor: 2.5
+        inflation_radius: 0.75
