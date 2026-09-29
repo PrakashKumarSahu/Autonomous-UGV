@@ -1,49 +1,61 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!--
-  ugv_test_arena.sdf — Autonomous UGV Showcase Arena (Enhanced)
-  ═══════════════════════════════════════════════════════════════════════════
-  ZERO FUEL/INTERNET DEPENDENCIES:
-    Ground plane, all obstacles, and lighting are inline SDF primitives.
+  outdoor_field.sdf — Open Outdoor Terrain for Vision-Based UGV (Problem Statement World)
+  ═══════════════════════════════════════════════════════════════════════════════════════
+  Problem: Vision-Based Autonomous Navigation for UGV in Outdoor GPS-Denied Environment
+  Challenges demonstrated: Path Detection · Visual Localization (SLAM) · Collision Avoidance
+
+  ZERO FUEL/INTERNET DEPENDENCIES — all geometry is inline SDF primitives.
 
   ROBOT IS NOT IN THIS FILE.
-  Localbot is spawned separately by sim.launch.py using ros_gz_sim create.
-  This keeps the world fully reusable for any robot configuration.
+  Localbot is spawned separately by sim.launch.py via ros_gz_sim create.
 
   WORLD NAME: "world_demo"
-    Must match the world_name launch argument in sim.launch.py (default='world_demo').
-    All GZ sensor topic paths use this name. Change via:
-      ros2 launch ugv_bringup ugv_complete.launch.py world_name=<your_name>
-    (as long as this file's <world name="..."> also matches)
+    Must match world_name launch argument (default='world_demo').
 
-  SHOWCASE ARENA LAYOUT  (top-down, X=East Y=North  unit=metre):
-  ┌────────────────────────────────────────────────────────────────────┐Y=+8
-  │ NORTH WALL  [BLUE panels]                                          │
-  │  ◉ landmark_N_W        ┌────── GOAL ZONE ──────┐        ◉ landmark_N_E
-  │  (-8,+7)               │ [CYAN floor tile]      │        (+8,+7)     │Y=+6
-  │                        └────────────────────────┘                    │
-  │  ████ corridor_wall_L  (━━━━ 1.8m passage ━━━━) corridor_wall_R ████│Y=+4
-  │         ▲ barrel farm (6,3.5)                                        │
-  │  [obs_box_L2 GREEN]    arc_gate_L  arc_gate_R  [obs_box_R2 GREEN]   │Y=+2
-  │                                                                      │
-  │   ◯Cyl_CL BLUE   ██ obs_box_C RED   ◯ Cyl_CR BLUE                  │Y= 0
-  │      diagonal_blocker (NW)  ·  side_pillar_SE (SE)                  │
-  │                                                                      │
-  │  [obs_box_L1 YELLOW]   ◯slalom_mid_L  ◯slalom_mid_R  [obs_box_R1] │Y=-3
-  │                    ◯ STEP PLATFORM (terrain test)                    │
-  │              [obs_box_start ORANGE] [obs_box_L0 PURPLE]              │Y=-5
-  │  ▲ spawn_post_L (-1.5,-7)      ▲ spawn_post_R (1.5,-7)             │Y=-7
-  │    ROBOT SPAWNS HERE (0,-6.5,yaw=π/2 facing north)                  │
-  │ SOUTH WALL  [ORANGE panels]                                          │
-  └────────────────────────────────────────────────────────────────────┘Y=-8
-  X=-10                                                              X=+10
+  DESIGN RATIONALE (maps directly to problem statement):
+    1. PATH DETECTION  — rocks, trees, and terrain mounds are distributed to create
+       clear hazard regions. YOLO classifies them; terrain_analysis_node marks
+       traversability. The safe path is NOT marked — the UGV must detect it.
+    2. VISUAL LOCALIZATION — trees, rocks, mounds, and colored goal/start markers
+       provide rich, repeatable visual features for RTAB-Map SLAM loop closures.
+    3. COLLISION AVOIDANCE — obstacles in and around the central path force Nav2 to
+       plan dynamic detours; the barrel cluster and rock wall test costmap inflation.
 
-  SUGGESTED NAVIGATION TEST GOALS (after SLAM map builds):
-    Goal A — straight north:  x= 0.0, y=+6.5  (all zones, 13 m)
-    Goal B — NW corner loop:  x=-7.0, y=+5.0
-    Goal C — NE corridor:     x=+7.0, y=+5.0  (barrel farm side)
-    Goal D — center zigzag:   x= 0.0, y= 0.0
-    Goal E — SW side pocket:  x=-7.5, y=-2.0
-    Goal F — step platform:   x= 0.0, y=-4.0  (terrain analysis)
+  OUTDOOR FIELD LAYOUT (top-down, X=East, Y=North, unit=metre)
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  ∞ OPEN TERRAIN — no enclosing walls                                    │
+  │                                                                         │
+  │            ★ GOAL B  (0, +12)  [cyan pad + white post]                 │ Y=+12
+  │                                                                         │
+  │  🌳 tree        🪨 rock         🌳 tree                                  │ Y=+9
+  │             🪨 rock_wall (forces detour)                                │ Y=+7
+  │  🌳 tree                         🌳 tree                                 │ Y=+6
+  │         🪨 rock  🪨 rock                                                │ Y=+4
+  │  ████ mound_R (elevated terrain, tests terrain_analysis)    ████ mound_L│ Y=+3
+  │           ──── ditch ridges ── (crossing challenge) ────               │ Y=+1
+  │  🌳 tree        🪨 rock   🌳 tree                                        │ Y= 0
+  │          🪨 rock cluster (3 boulders, centre-left)                      │ Y=-1
+  │  🌳 tree                         🌳 tree                                 │ Y=-2
+  │         🪨 rock           🪨 rock                                       │ Y=-4
+  │  ████ mound_L (terrain mound)                                           │ Y=-3
+  │                                                                         │
+  │           ★ START A  (0, -6.5) [green pad, robot spawns here ↑]        │ Y=-6.5
+  │                                                                         │
+  │  ∞ open ground extends to the horizon                                   │
+  └─────────────────────────────────────────────────────────────────────────┘
+  X=-15                                                                X=+15
+
+  SUGGESTED A→B NAVIGATION DEMO (after SLAM map builds):
+    ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+      '{pose: {header: {frame_id: "map"}, pose: {position: {x: 0.0, y: 12.0, z: 0.0},
+        orientation: {w: 1.0}}}}'
+
+  OTHER TEST GOALS:
+    NW detour:   x=-5.0, y=+8.0
+    NE detour:   x=+5.0, y=+8.0
+    Rock field:  x=+2.0, y=+3.0
+    Ditch cross: x= 0.0, y=+2.5
 -->
 <sdf version='1.7'>
 <world name='world_demo'>
@@ -83,10 +95,10 @@
       </ignition-gui>
       <engine>ogre2</engine>
       <scene>scene</scene>
-      <ambient_light>0.5 0.5 0.5</ambient_light>
-      <background_color>0.53 0.67 0.88</background_color>
-      <!-- Camera: isometric overview of entire arena -->
-      <camera_pose>-4 -16 12 0 0.60 1.25</camera_pose>
+      <ambient_light>0.4 0.4 0.4</ambient_light>
+      <background_color>0.47 0.65 0.82</background_color>
+      <!-- Camera: wide isometric view of the whole field from SE -->
+      <camera_pose>10 -20 14 0 0.65 2.1</camera_pose>
     </plugin>
 
     <plugin filename="WorldControl" name="World control">
@@ -153,694 +165,611 @@
   </gui>
 
   <!-- ════════════════════════════════════════════════════════════════
-       SCENE & LIGHTING
+       OUTDOOR SCENE & LIGHTING
+       Open sky, natural sun angle, soft ambient fill
        ════════════════════════════════════════════════════════════════ -->
   <scene>
-    <ambient>0.5 0.5 0.5 1</ambient>
-    <background>0.53 0.67 0.88 1</background>
+    <ambient>0.48 0.50 0.45 1</ambient>
+    <background>0.47 0.65 0.82 1</background>  <!-- open sky blue -->
     <shadows>true</shadows>
     <grid>false</grid>
   </scene>
 
-  <!-- Primary sunlight — angled for good shadow contrast -->
+  <!-- Primary sun (morning angle) — casts directional shadows for depth cues -->
   <light type="directional" name="sun">
     <cast_shadows>true</cast_shadows>
-    <pose>0 0 15 0 0 0</pose>
-    <diffuse>0.9 0.88 0.82 1</diffuse>
-    <specular>0.3 0.3 0.3 1</specular>
-    <direction>-0.4 0.2 -0.9</direction>
+    <pose>0 0 20 0 0 0</pose>
+    <diffuse>0.92 0.88 0.78 1</diffuse>
+    <specular>0.25 0.22 0.18 1</specular>
+    <direction>-0.5 0.3 -0.8</direction>
     <attenuation>
-      <range>1000</range><constant>0.9</constant>
-      <linear>0.01</linear><quadratic>0.001</quadratic>
+      <range>2000</range><constant>0.9</constant>
+      <linear>0.001</linear><quadratic>0.0001</quadratic>
     </attenuation>
   </light>
 
-  <!-- Soft fill — eliminates harsh shadow undercuts -->
-  <light type="directional" name="fill_light">
+  <!-- Sky fill — prevents harsh under-shadow blackout -->
+  <light type="directional" name="sky_fill">
     <cast_shadows>false</cast_shadows>
-    <pose>0 0 8 0 0 0</pose>
-    <diffuse>0.45 0.50 0.55 1</diffuse>
+    <pose>0 0 10 0 0 0</pose>
+    <diffuse>0.38 0.45 0.55 1</diffuse>
     <specular>0.05 0.05 0.05 1</specular>
-    <direction>0.2 -0.1 -1</direction>
-  </light>
-
-  <!-- Warm point light — north end (goal zone ambiance) -->
-  <light type="point" name="point_north">
-    <cast_shadows>false</cast_shadows>
-    <pose>0 6 3.5 0 0 0</pose>
-    <diffuse>1.0 0.85 0.60 1</diffuse>
-    <specular>0.3 0.25 0.15 1</specular>
-    <attenuation>
-      <range>12</range><constant>0.4</constant>
-      <linear>0.1</linear><quadratic>0.02</quadratic>
-    </attenuation>
-  </light>
-
-  <!-- Cool point light — south end (start zone ambiance) -->
-  <light type="point" name="point_south">
-    <cast_shadows>false</cast_shadows>
-    <pose>0 -6 3.5 0 0 0</pose>
-    <diffuse>0.65 0.78 1.0 1</diffuse>
-    <specular>0.2 0.25 0.35 1</specular>
-    <attenuation>
-      <range>10</range><constant>0.5</constant>
-      <linear>0.12</linear><quadratic>0.02</quadratic>
-    </attenuation>
+    <direction>0.1 -0.1 -1</direction>
   </light>
 
   <!-- ════════════════════════════════════════════════════════════════
-       GROUND PLANE — warm concrete tile texture via material
+       GROUND — grass-coloured, large open field
        ════════════════════════════════════════════════════════════════ -->
   <model name="ground_plane">
     <static>true</static>
     <link name="link">
       <collision name="collision">
-        <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+        <geometry><plane><normal>0 0 1</normal><size>500 500</size></plane></geometry>
         <surface>
-          <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          <friction><ode><mu>0.8</mu><mu2>0.8</mu2></ode></friction>
           <contact><ode/></contact>
         </surface>
       </collision>
       <visual name="visual">
         <cast_shadows>false</cast_shadows>
-        <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+        <geometry><plane><normal>0 0 1</normal><size>500 500</size></plane></geometry>
         <material>
-          <ambient>0.70 0.68 0.62 1</ambient>
-          <diffuse>0.70 0.68 0.62 1</diffuse>
-          <specular>0.04 0.04 0.04 1</specular>
+          <!-- Grass / dry-earth outdoor ground -->
+          <ambient>0.42 0.50 0.28 1</ambient>
+          <diffuse>0.45 0.52 0.30 1</diffuse>
+          <specular>0.02 0.03 0.01 1</specular>
         </material>
       </visual>
     </link>
   </model>
 
   <!-- ════════════════════════════════════════════════════════════════
-       FLOOR ZONE TILES — colored guide lanes for visual richness
-       Each tile is 0.02 m tall so it's traversable but visible in depth.
+       DIRT PATH — narrow traversable trail from A to B
+       (visible to depth sensor and YOLO; slightly lighter than grass)
        ════════════════════════════════════════════════════════════════ -->
+  <model name="path_S">
+    <static>true</static><pose>0 -3.5 0.005 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>2.5 6.0 0.01</size></box></geometry>
+        <material><ambient>0.62 0.55 0.38 1</ambient><diffuse>0.65 0.58 0.40 1</diffuse></material></visual>
+    </link>
+  </model>
+  <model name="path_C">
+    <static>true</static><pose>0 2.0 0.005 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>2.5 8.0 0.01</size></box></geometry>
+        <material><ambient>0.62 0.55 0.38 1</ambient><diffuse>0.65 0.58 0.40 1</diffuse></material></visual>
+    </link>
+  </model>
+  <model name="path_N">
+    <static>true</static><pose>0 8.0 0.005 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>2.5 6.0 0.01</size></box></geometry>
+        <material><ambient>0.62 0.55 0.38 1</ambient><diffuse>0.65 0.58 0.40 1</diffuse></material></visual>
+    </link>
+  </model>
 
-  <!-- START ZONE: deep charcoal "launch pad" at robot spawn -->
-  <model name="floor_start_zone">
+  <!-- ════════════════════════════════════════════════════════════════
+       START MARKER A — bright green pad + white post
+       ════════════════════════════════════════════════════════════════ -->
+  <model name="start_pad">
     <static>true</static><pose>0 -6.5 0.01 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>4.0 2.5 0.02</size></box></geometry>
-        <material><ambient>0.18 0.18 0.18 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse></material></visual>
+      <visual name="v"><geometry><box><size>3.0 2.0 0.02</size></box></geometry>
+        <material><ambient>0.10 0.82 0.18 1</ambient><diffuse>0.12 0.85 0.20 1</diffuse></material></visual>
     </link>
   </model>
-
-  <!-- CENTRAL CORRIDOR: teal lane running north through zigzag zone -->
-  <model name="floor_lane_S">
-    <static>true</static><pose>0 -3.5 0.01 0 0 0</pose>
+  <model name="start_post_L">
+    <static>true</static><pose>-1.8 -6.5 0.7 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>3.5 4.0 0.02</size></box></geometry>
-        <material><ambient>0.15 0.45 0.50 1</ambient><diffuse>0.15 0.45 0.50 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- ZIGZAG CENTER: warm terracotta tile around center obstacle cluster -->
-  <model name="floor_zigzag">
-    <static>true</static><pose>0 0 0.01 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>10.0 3.5 0.02</size></box></geometry>
-        <material><ambient>0.55 0.30 0.20 1</ambient><diffuse>0.55 0.30 0.20 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- CORRIDOR THROAT: bright yellow guide into narrow passage -->
-  <model name="floor_corridor">
-    <static>true</static><pose>0 3.5 0.01 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>4.0 4.0 0.02</size></box></geometry>
-        <material><ambient>0.70 0.60 0.10 1</ambient><diffuse>0.70 0.60 0.10 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- GOAL ZONE: bright cyan arrival pad -->
-  <model name="floor_goal_zone">
-    <static>true</static><pose>0 6.8 0.01 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>7.0 2.0 0.02</size></box></geometry>
-        <material><ambient>0.10 0.70 0.72 1</ambient><diffuse>0.10 0.70 0.72 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- STEP PLATFORM RAMP INDICATOR: orange zone showing terrain zone -->
-  <model name="floor_terrain_zone">
-    <static>true</static><pose>0 -4.2 0.01 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>5.0 1.5 0.02</size></box></geometry>
-        <material><ambient>0.75 0.35 0.05 1</ambient><diffuse>0.75 0.35 0.05 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- ════════════════════════════════════════════════════════════════
-       PERIMETER WALLS — Arena: 20m (X:-10..+10) × 16m (Y:-8..+8)
-       Each wall has a vivid colored panel on its interior face.
-       ════════════════════════════════════════════════════════════════ -->
-
-  <!-- SOUTH WALL — orange-red -->
-  <model name="wall_south">
-    <static>true</static><pose>0 -8 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-        <material><ambient>0.30 0.30 0.30 1</ambient><diffuse>0.30 0.30 0.30 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>20.6 0.3 2.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- South wall inner color panel: ORANGE-RED -->
-  <model name="panel_south">
-    <static>true</static><pose>0 -7.83 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>19.0 0.05 2.2</size></box></geometry>
-        <material><ambient>0.90 0.35 0.10 1</ambient><diffuse>0.90 0.35 0.10 1</diffuse>
-          <specular>0.3 0.1 0.05 1</specular></material></visual>
-    </link>
-  </model>
-
-  <!-- NORTH WALL — steel blue -->
-  <model name="wall_north">
-    <static>true</static><pose>0 8 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-        <material><ambient>0.28 0.28 0.32 1</ambient><diffuse>0.28 0.28 0.32 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>20.6 0.3 2.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- North wall inner color panel: COBALT BLUE -->
-  <model name="panel_north">
-    <static>true</static><pose>0 7.83 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>19.0 0.05 2.2</size></box></geometry>
-        <material><ambient>0.10 0.30 0.85 1</ambient><diffuse>0.10 0.30 0.85 1</diffuse>
-          <specular>0.2 0.4 0.9 1</specular></material></visual>
-    </link>
-  </model>
-
-  <!-- WEST WALL — dark -->
-  <model name="wall_west">
-    <static>true</static><pose>-10 0 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-        <material><ambient>0.28 0.28 0.28 1</ambient><diffuse>0.28 0.28 0.28 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>0.3 16.6 2.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- West wall inner color panel: LIME GREEN -->
-  <model name="panel_west">
-    <static>true</static><pose>-9.83 0 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.05 15.0 2.2</size></box></geometry>
-        <material><ambient>0.20 0.78 0.22 1</ambient><diffuse>0.20 0.78 0.22 1</diffuse>
-          <specular>0.1 0.5 0.1 1</specular></material></visual>
-    </link>
-  </model>
-
-  <!-- EAST WALL — dark -->
-  <model name="wall_east">
-    <static>true</static><pose>10 0 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-        <material><ambient>0.28 0.28 0.28 1</ambient><diffuse>0.28 0.28 0.28 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>0.3 16.6 2.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- East wall inner color panel: VIOLET-MAGENTA -->
-  <model name="panel_east">
-    <static>true</static><pose>9.83 0 1.25 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.05 15.0 2.2</size></box></geometry>
-        <material><ambient>0.65 0.15 0.72 1</ambient><diffuse>0.65 0.15 0.72 1</diffuse>
-          <specular>0.4 0.05 0.5 1</specular></material></visual>
-    </link>
-  </model>
-
-  <!-- ════════════════════════════════════════════════════════════════
-       SPAWN ZONE MARKERS — flanking the robot start position
-       Bright yellow pylons the robot sees immediately on startup.
-       ════════════════════════════════════════════════════════════════ -->
-  <model name="spawn_post_L">
-    <static>true</static><pose>-2.0 -7.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.12</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.95 0.90 0.05 1</ambient><diffuse>0.95 0.90 0.05 1</diffuse>
-          <specular>0.6 0.6 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.12</radius><length>1.2</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="spawn_post_R">
-    <static>true</static><pose>2.0 -7.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.12</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.95 0.90 0.05 1</ambient><diffuse>0.95 0.90 0.05 1</diffuse>
-          <specular>0.6 0.6 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.12</radius><length>1.2</length></cylinder></geometry></collision>
-    </link>
-  </model>
-
-  <!-- ════════════════════════════════════════════════════════════════
-       ZONE 1 — APPROACH  (Y: -8 to -5)
-       First visible obstacles from spawn + low terrain step
-       ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Step platform: 10cm tall, 4m wide — exercises terrain_analysis_node -->
-  <model name="step_platform">
-    <static>true</static><pose>0 -4.2 0.05 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>4.0 1.0 0.10</size></box></geometry>
-        <material><ambient>0.50 0.50 0.50 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>4.0 1.0 0.10</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- Step edge stripe — bright orange, helps YOLO + SLAM see it -->
-  <model name="step_stripe">
-    <static>true</static><pose>0 -4.2 0.105 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>4.0 0.08 0.01</size></box></geometry>
-        <material><ambient>1.0 0.50 0.0 1</ambient><diffuse>1.0 0.50 0.0 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- Row 1 (y=-5): First decision point — off-center forces robot to choose -->
-  <model name="obs_box_start">
-    <static>true</static><pose>2.5 -5.0 0.5 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-        <material><ambient>0.95 0.38 0.08 1</ambient><diffuse>0.95 0.38 0.08 1</diffuse>
-          <specular>0.5 0.2 0.05 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- Mirror obstacle on left — forces bot into centre gap or left gap -->
-  <model name="obs_box_L0">
-    <static>true</static><pose>-2.5 -5.0 0.5 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-        <material><ambient>0.55 0.12 0.75 1</ambient><diffuse>0.55 0.12 0.75 1</diffuse>
-          <specular>0.3 0.05 0.5 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
-    </link>
-  </model>
-
-  <!-- ════════════════════════════════════════════════════════════════
-       ZONE 2 — SLALOM  (Y: -5 to -1)
-       Staggered gate pair + additional slalom pylons
-       ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Gate pair (row y=-3) — wide enough for Nav2, forces planning -->
-  <model name="obs_box_L1">
-    <static>true</static><pose>-4.0 -3.0 0.5 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.2 1.0 1.0</size></box></geometry>
-        <material><ambient>0.95 0.82 0.08 1</ambient><diffuse>0.95 0.82 0.08 1</diffuse>
-          <specular>0.5 0.45 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.2 1.0 1.0</size></box></geometry></collision>
-    </link>
-  </model>
-  <model name="obs_box_R1">
-    <static>true</static><pose>4.0 -3.0 0.5 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.2 1.0 1.0</size></box></geometry>
-        <material><ambient>0.95 0.82 0.08 1</ambient><diffuse>0.95 0.82 0.08 1</diffuse>
-          <specular>0.5 0.45 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.2 1.0 1.0</size></box></geometry></collision>
-    </link>
-  </model>
-
-  <!-- Mid-slalom pylons — staggered L/R to force sinusoidal path -->
-  <model name="obs_cyl_slalom_L">
-    <static>true</static><pose>-1.8 -4.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.35</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.05 0.55 0.90 1</ambient><diffuse>0.05 0.55 0.90 1</diffuse>
-          <specular>0.1 0.4 0.7 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.35</radius><length>1.2</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="obs_cyl_slalom_R">
-    <static>true</static><pose>1.8 -2.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.35</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.05 0.55 0.90 1</ambient><diffuse>0.05 0.55 0.90 1</diffuse>
-          <specular>0.1 0.4 0.7 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.35</radius><length>1.2</length></cylinder></geometry></collision>
-    </link>
-  </model>
-
-  <!-- Side walls partially blocking east and west passages in slalom zone -->
-  <model name="side_wall_WS">
-    <static>true</static><pose>-7.5 -3.5 0.75 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>3.5 0.3 1.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>3.5 0.3 1.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <model name="side_wall_ES">
-    <static>true</static><pose>7.5 -2.5 0.75 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>3.5 0.3 1.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>3.5 0.3 1.5</size></box></geometry></collision>
-    </link>
-  </model>
-
-  <!-- ════════════════════════════════════════════════════════════════
-       ZONE 3 — ZIGZAG CENTER  (Y: -1 to +2)
-       Original cluster + diagonal blocker in NW + SE pillar
-       ════════════════════════════════════════════════════════════════ -->
-
-  <model name="obs_cyl_CL">
-    <static>true</static><pose>-3.5 0.0 0.75 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-        <material><ambient>0.08 0.38 0.92 1</ambient><diffuse>0.08 0.38 0.92 1</diffuse>
-          <specular>0.2 0.5 1.0 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <!-- Central red boss — tallest landmark for SLAM features -->
-  <model name="obs_box_C">
-    <static>true</static><pose>0.0 -0.5 0.9 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.2 1.2 1.8</size></box></geometry>
-        <material><ambient>0.88 0.12 0.12 1</ambient><diffuse>0.88 0.12 0.12 1</diffuse>
-          <specular>0.6 0.1 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.2 1.2 1.8</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- White stripe on top of central box — extra visual SLAM feature -->
-  <model name="obs_box_C_cap">
-    <static>true</static><pose>0.0 -0.5 1.85 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>1.2 1.2 0.08</size></box></geometry>
+      <visual name="v"><geometry><cylinder><radius>0.08</radius><length>1.4</length></cylinder></geometry>
         <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.08</radius><length>1.4</length></cylinder></geometry></collision>
     </link>
   </model>
-  <model name="obs_cyl_CR">
-    <static>true</static><pose>3.5 0.0 0.75 0 0 0</pose>
+  <model name="start_post_R">
+    <static>true</static><pose>1.8 -6.5 0.7 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-        <material><ambient>0.08 0.38 0.92 1</ambient><diffuse>0.08 0.38 0.92 1</diffuse>
-          <specular>0.2 0.5 1.0 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><cylinder><radius>0.08</radius><length>1.4</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.08</radius><length>1.4</length></cylinder></geometry></collision>
     </link>
   </model>
-
-  <!-- Diagonal partial wall (NW area) — forces non-trivial detour path -->
-  <model name="obs_diagonal_NW">
-    <static>true</static><pose>-6.5 0.5 0.75 0 0 0.523</pose>  <!-- 30 deg yaw -->
+  <!-- Flag banner between start posts -->
+  <model name="start_banner">
+    <static>true</static><pose>0 -6.5 1.42 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>3.0 0.3 1.5</size></box></geometry>
-        <material><ambient>0.82 0.58 0.10 1</ambient><diffuse>0.82 0.58 0.10 1</diffuse>
-          <specular>0.4 0.3 0.05 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>3.0 0.3 1.5</size></box></geometry></collision>
-    </link>
-  </model>
-
-  <!-- SE sector pillar — obstacle on east side of zigzag zone -->
-  <model name="obs_pillar_SE">
-    <static>true</static><pose>6.5 -0.5 0.65 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.45</radius><length>1.3</length></cylinder></geometry>
-        <material><ambient>0.72 0.28 0.10 1</ambient><diffuse>0.72 0.28 0.10 1</diffuse>
-          <specular>0.5 0.2 0.05 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.45</radius><length>1.3</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><box><size>3.7 0.05 0.35</size></box></geometry>
+        <material><ambient>0.10 0.82 0.18 1</ambient><diffuse>0.12 0.85 0.20 1</diffuse></material></visual>
     </link>
   </model>
 
   <!-- ════════════════════════════════════════════════════════════════
-       ZONE 4 — CORRIDOR  (Y: +2 to +6)
-       Green side blockers, corridor walls forcing 1.8 m gap,
-       gateway arches, barrel farm in SE pocket
+       GOAL MARKER B — cyan pad + white post + flag
        ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Side blockers: push robot into center lane -->
-  <model name="obs_box_L2">
-    <static>true</static><pose>-6.5 2.0 0.5 0 0 0</pose>
+  <model name="goal_pad">
+    <static>true</static><pose>0 12.0 0.01 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-        <material><ambient>0.18 0.72 0.28 1</ambient><diffuse>0.18 0.72 0.28 1</diffuse>
-          <specular>0.1 0.5 0.15 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.5 2.0 1.0</size></box></geometry></collision>
+      <visual name="v"><geometry><box><size>4.0 2.5 0.02</size></box></geometry>
+        <material><ambient>0.05 0.82 0.90 1</ambient><diffuse>0.06 0.85 0.92 1</diffuse></material></visual>
     </link>
   </model>
-  <model name="obs_box_R2">
-    <static>true</static><pose>6.5 2.0 0.5 0 0 0</pose>
+  <model name="goal_post_L">
+    <static>true</static><pose>-2.2 12.0 0.9 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-        <material><ambient>0.18 0.72 0.28 1</ambient><diffuse>0.18 0.72 0.28 1</diffuse>
-          <specular>0.1 0.5 0.15 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>1.5 2.0 1.0</size></box></geometry></collision>
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.8</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.8</length></cylinder></geometry></collision>
     </link>
   </model>
-
-  <!-- Gateway arch pillars — mark the corridor entrance visually -->
-  <model name="arc_gate_L">
-    <static>true</static><pose>-1.5 2.8 0.9 0 0 0</pose>
+  <model name="goal_post_R">
+    <static>true</static><pose>2.2 12.0 0.9 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>1.8</length></cylinder></geometry>
-        <material><ambient>0.92 0.30 0.05 1</ambient><diffuse>0.92 0.30 0.05 1</diffuse>
-          <specular>0.6 0.2 0.02 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>1.8</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.8</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.8</length></cylinder></geometry></collision>
     </link>
   </model>
-  <model name="arc_gate_R">
-    <static>true</static><pose>1.5 2.8 0.9 0 0 0</pose>
+  <model name="goal_banner">
+    <static>true</static><pose>0 12.0 1.88 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>1.8</length></cylinder></geometry>
-        <material><ambient>0.92 0.30 0.05 1</ambient><diffuse>0.92 0.30 0.05 1</diffuse>
-          <specular>0.6 0.2 0.02 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>1.8</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <!-- Lintel beam above gateway — creates arch visual -->
-  <model name="arc_gate_top">
-    <static>true</static><pose>0 2.8 1.88 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>3.5 0.18 0.18</size></box></geometry>
-        <material><ambient>0.92 0.30 0.05 1</ambient><diffuse>0.92 0.30 0.05 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- Corridor walls: 1.8 m passage gap in the centre -->
-  <model name="corridor_wall_L">
-    <static>true</static><pose>-3.4 4.0 0.85 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.3 4.0 1.7</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse>
-          <specular>0.1 0.1 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>0.3 4.0 1.7</size></box></geometry></collision>
-    </link>
-  </model>
-  <!-- Colored stripe on corridor wall for SLAM landmarks -->
-  <model name="corridor_wall_L_stripe">
-    <static>true</static><pose>-3.25 4.0 1.2 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.05 3.9 0.35</size></box></geometry>
-        <material><ambient>0.10 0.70 0.72 1</ambient><diffuse>0.10 0.70 0.72 1</diffuse></material></visual>
-    </link>
-  </model>
-  <model name="corridor_wall_R">
-    <static>true</static><pose>3.4 4.0 0.85 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.3 4.0 1.7</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse>
-          <specular>0.1 0.1 0.1</specular></material></visual>
-      <collision name="c"><geometry><box><size>0.3 4.0 1.7</size></box></geometry></collision>
-    </link>
-  </model>
-  <model name="corridor_wall_R_stripe">
-    <static>true</static><pose>3.25 4.0 1.2 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.05 3.9 0.35</size></box></geometry>
-        <material><ambient>0.95 0.40 0.70 1</ambient><diffuse>0.95 0.40 0.70 1</diffuse></material></visual>
-    </link>
-  </model>
-
-  <!-- Barrel farm: 5 small cylinders, tight cluster — tests costmap inflation + YOLO -->
-  <model name="barrel_A">
-    <static>true</static><pose>6.5 3.5 0.45 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry>
-        <material><ambient>0.78 0.10 0.10 1</ambient><diffuse>0.78 0.10 0.10 1</diffuse></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="barrel_B">
-    <static>true</static><pose>7.2 3.1 0.45 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry>
-        <material><ambient>0.10 0.30 0.80 1</ambient><diffuse>0.10 0.30 0.80 1</diffuse></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="barrel_C">
-    <static>true</static><pose>7.5 4.0 0.45 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry>
-        <material><ambient>0.20 0.72 0.18 1</ambient><diffuse>0.20 0.72 0.18 1</diffuse></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="barrel_D">
-    <static>true</static><pose>6.8 4.5 0.45 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry>
-        <material><ambient>0.90 0.55 0.05 1</ambient><diffuse>0.90 0.55 0.05 1</diffuse></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="barrel_E">
-    <static>true</static><pose>8.0 3.8 0.45 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry>
-        <material><ambient>0.60 0.10 0.72 1</ambient><diffuse>0.60 0.10 0.72 1</diffuse></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.9</length></cylinder></geometry></collision>
-    </link>
-  </model>
-
-  <!-- NW sector dead-end pocket — L-shaped wall creating partial enclosure -->
-  <model name="pocket_wall_N">
-    <static>true</static><pose>-7.5 4.5 0.75 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>4.0 0.3 1.5</size></box></geometry>
-        <material><ambient>0.55 0.55 0.55 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>4.0 0.3 1.5</size></box></geometry></collision>
-    </link>
-  </model>
-  <model name="pocket_wall_E">
-    <static>true</static><pose>-5.65 3.0 0.75 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.3 3.2 1.5</size></box></geometry>
-        <material><ambient>0.55 0.55 0.55 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>0.3 3.2 1.5</size></box></geometry></collision>
+      <visual name="v"><geometry><box><size>4.6 0.05 0.40</size></box></geometry>
+        <material><ambient>0.05 0.82 0.90 1</ambient><diffuse>0.06 0.85 0.92 1</diffuse></material></visual>
     </link>
   </model>
 
   <!-- ════════════════════════════════════════════════════════════════
-       ZONE 5 — FINAL BOTTLENECK  (Y: +5 to +8)
-       Original shelf wall + orange cylinders; now with landmark posts
+       ROCKS / BOULDERS — natural grey, irregular sizes
+       Each at ground level (z = radius so sphere sits on ground)
        ════════════════════════════════════════════════════════════════ -->
 
-  <!-- Shelf wall — angled slightly to make path planning asymmetric -->
-  <model name="obs_shelf_wall">
-    <static>true</static><pose>0.0 5.2 1.0 0 0 0</pose>
+  <!-- Rock macros: rock_NN at (x, y, z=half_height) with random yaw rotation -->
+
+  <!-- Approach zone rocks (y=-5 to -2) -->
+  <model name="rock_01">
+    <static>true</static><pose>-3.5 -4.5 0.45 0 0 0.7</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>6.0 0.3 2.0</size></box></geometry>
-        <material><ambient>0.40 0.25 0.08 1</ambient><diffuse>0.40 0.25 0.08 1</diffuse>
-          <specular>0.1 0.07 0.02 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>6.0 0.3 2.0</size></box></geometry></collision>
+      <visual name="v"><geometry><sphere><radius>0.50</radius></sphere></geometry>
+        <material><ambient>0.42 0.40 0.37 1</ambient><diffuse>0.44 0.42 0.38 1</diffuse><specular>0.08 0.08 0.07 1</specular></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.50</radius></sphere></collision>
     </link>
   </model>
-  <!-- Shelf wall colour accent panels -->
-  <model name="shelf_panel_L">
-    <static>true</static><pose>-2.0 5.18 1.0 0 0 0</pose>
+  <model name="rock_02">
+    <static>true</static><pose>3.2 -3.8 0.35 0 0.1 1.2</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>1.8 0.04 1.8</size></box></geometry>
-        <material><ambient>0.92 0.20 0.20 1</ambient><diffuse>0.92 0.20 0.20 1</diffuse></material></visual>
+      <visual name="v"><geometry><box><size>0.9 0.7 0.70</size></box></geometry>
+        <material><ambient>0.48 0.46 0.42 1</ambient><diffuse>0.50 0.48 0.44 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.9 0.7 0.70</size></box></geometry></collision>
     </link>
   </model>
-  <model name="shelf_panel_R">
-    <static>true</static><pose>2.0 5.18 1.0 0 0 0</pose>
+  <model name="rock_03">
+    <static>true</static><pose>5.5 -5.0 0.30 0.1 0 0.4</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>1.8 0.04 1.8</size></box></geometry>
-        <material><ambient>0.20 0.65 0.92 1</ambient><diffuse>0.20 0.65 0.92 1</diffuse></material></visual>
+      <visual name="v"><geometry><sphere><radius>0.38</radius></sphere></geometry>
+        <material><ambient>0.40 0.38 0.35 1</ambient><diffuse>0.42 0.40 0.36 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.38</radius></sphere></collision>
     </link>
   </model>
 
-  <!-- Orange guard cylinders at shelf ends -->
-  <model name="obs_cyl_NW">
-    <static>true</static><pose>-4.5 5.0 0.75 0 0 0</pose>
+  <!-- Central obstacle cluster — left of path (y=-1 to +1): rocks force path right -->
+  <model name="rock_04">
+    <static>true</static><pose>-1.8 -1.5 0.55 0 0 0.3</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-        <material><ambient>0.92 0.42 0.05 1</ambient><diffuse>0.92 0.42 0.05 1</diffuse>
-          <specular>0.6 0.3 0.02 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><sphere><radius>0.60</radius></sphere></geometry>
+        <material><ambient>0.45 0.43 0.40 1</ambient><diffuse>0.47 0.45 0.41 1</diffuse><specular>0.10 0.10 0.08 1</specular></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.60</radius></sphere></collision>
     </link>
   </model>
-  <model name="obs_cyl_NE">
-    <static>true</static><pose>4.5 5.0 0.75 0 0 0</pose>
+  <model name="rock_05">
+    <static>true</static><pose>-2.8 -0.5 0.40 0 0 1.0</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-        <material><ambient>0.92 0.42 0.05 1</ambient><diffuse>0.92 0.42 0.05 1</diffuse>
-          <specular>0.6 0.3 0.02 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><box><size>1.0 0.8 0.80</size></box></geometry>
+        <material><ambient>0.43 0.42 0.38 1</ambient><diffuse>0.46 0.44 0.40 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.0 0.8 0.80</size></box></geometry></collision>
     </link>
   </model>
-
-  <!-- NE corner standalone post — visible from all headings -->
-  <model name="obs_NE_post">
-    <static>true</static><pose>7.0 4.0 0.75 0 0 0</pose>
+  <model name="rock_06">
+    <static>true</static><pose>-1.0 0.8 0.35 0 0 0.8</pose>
     <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry>
-        <material><ambient>0.55 0.55 0.60 1</ambient><diffuse>0.55 0.55 0.60 1</diffuse>
-          <specular>0.3 0.3 0.35 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.5</radius><length>1.5</length></cylinder></geometry></collision>
+      <visual name="v"><geometry><sphere><radius>0.38</radius></sphere></geometry>
+        <material><ambient>0.40 0.38 0.35 1</ambient><diffuse>0.42 0.40 0.36 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.38</radius></sphere></collision>
     </link>
   </model>
 
-  <!-- LANDMARK POSTS — tall, vivid, one at each arena corner for SLAM loop closure -->
-  <model name="landmark_NW">
-    <static>true</static><pose>-8.0 7.0 1.0 0 0 0</pose>
+  <!-- Rock on right side of path forcing nav planning -->
+  <model name="rock_07">
+    <static>true</static><pose>2.5 0.5 0.45 0 0 0.6</pose>
     <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.50</radius></sphere></geometry>
+        <material><ambient>0.46 0.44 0.41 1</ambient><diffuse>0.48 0.46 0.42 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.50</radius></sphere></collision>
+    </link>
+  </model>
+
+  <!-- Upper zone rocks (y=+3 to +7) -->
+  <model name="rock_08">
+    <static>true</static><pose>-3.2 3.5 0.50 0 0 0.2</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.55</radius></sphere></geometry>
+        <material><ambient>0.44 0.42 0.38 1</ambient><diffuse>0.46 0.44 0.40 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.55</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="rock_09">
+    <static>true</static><pose>4.0 4.5 0.35 0.05 0 1.5</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.8 0.6 0.70</size></box></geometry>
+        <material><ambient>0.47 0.45 0.41 1</ambient><diffuse>0.49 0.47 0.43 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.8 0.6 0.70</size></box></geometry></collision>
+    </link>
+  </model>
+  <model name="rock_10">
+    <static>true</static><pose>-1.5 6.5 0.45 0 0 0.9</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.50</radius></sphere></geometry>
+        <material><ambient>0.43 0.41 0.38 1</ambient><diffuse>0.45 0.43 0.39 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.50</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="rock_11">
+    <static>true</static><pose>2.8 7.0 0.30 0 0 0.3</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.35</radius></sphere></geometry>
+        <material><ambient>0.42 0.40 0.37 1</ambient><diffuse>0.44 0.42 0.38 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.35</radius></sphere></collision>
+    </link>
+  </model>
+
+  <!-- Rock wall blocking shortcut at y=+7 — forces path around -->
+  <model name="rock_wall_A">
+    <static>true</static><pose>0 7.5 0.45 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.9 0.7 0.90</size></box></geometry>
+        <material><ambient>0.46 0.44 0.40 1</ambient><diffuse>0.48 0.46 0.42 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.9 0.7 0.90</size></box></geometry></collision>
+    </link>
+  </model>
+  <model name="rock_wall_B">
+    <static>true</static><pose>1.2 7.2 0.35 0 0.1 0.5</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.42</radius></sphere></geometry>
+        <material><ambient>0.44 0.42 0.39 1</ambient><diffuse>0.46 0.44 0.40 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.42</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="rock_wall_C">
+    <static>true</static><pose>-1.3 7.6 0.30 0 0 0.9</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.7 0.5 0.60</size></box></geometry>
+        <material><ambient>0.45 0.43 0.40 1</ambient><diffuse>0.47 0.45 0.41 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.7 0.5 0.60</size></box></geometry></collision>
+    </link>
+  </model>
+
+  <!-- Far-field rocks (beyond goal, distant SLAM features) -->
+  <model name="rock_far_L">
+    <static>true</static><pose>-8 10 0.45 0 0 0.4</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.55</radius></sphere></geometry>
+        <material><ambient>0.44 0.42 0.38 1</ambient><diffuse>0.46 0.44 0.40 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.55</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="rock_far_R">
+    <static>true</static><pose>8 9 0.40 0 0 1.1</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.8 0.6 0.80</size></box></geometry>
+        <material><ambient>0.46 0.44 0.41 1</ambient><diffuse>0.48 0.46 0.42 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.8 0.6 0.80</size></box></geometry></collision>
+    </link>
+  </model>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       TREES — trunk (cylinder) + foliage (sphere)
+       Rich visual SLAM landmarks; collision on trunk only
+       ════════════════════════════════════════════════════════════════ -->
+
+  <!-- Southern tree line (flanks approach zone) -->
+  <model name="tree_01">
+    <static>true</static><pose>-5.5 -5.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.1 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.16</radius><length>2.2</length></cylinder></geometry>
+        <material><ambient>0.30 0.18 0.06 1</ambient><diffuse>0.33 0.20 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.16</radius><length>2.2</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.0 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.30</radius></sphere></geometry>
+        <material><ambient>0.10 0.38 0.08 1</ambient><diffuse>0.12 0.42 0.09 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.30</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_02">
+    <static>true</static><pose>5.0 -4.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.0 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.14</radius><length>2.0</length></cylinder></geometry>
+        <material><ambient>0.28 0.16 0.05 1</ambient><diffuse>0.30 0.18 0.06 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.14</radius><length>2.0</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 2.8 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.15</radius></sphere></geometry>
+        <material><ambient>0.12 0.40 0.08 1</ambient><diffuse>0.13 0.44 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.15</radius></sphere></collision>
+    </link>
+  </model>
+
+  <!-- Obstacle zone trees (flanks y=-2 to +2) -->
+  <model name="tree_03">
+    <static>true</static><pose>-6.0 -2.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.2 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry>
+        <material><ambient>0.32 0.19 0.07 1</ambient><diffuse>0.35 0.21 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.2 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.40</radius></sphere></geometry>
+        <material><ambient>0.09 0.36 0.07 1</ambient><diffuse>0.11 0.40 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.40</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_04">
+    <static>true</static><pose>6.5 -1.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 0.95 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.13</radius><length>1.9</length></cylinder></geometry>
+        <material><ambient>0.29 0.17 0.06 1</ambient><diffuse>0.31 0.19 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.13</radius><length>1.9</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 2.7 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.10</radius></sphere></geometry>
+        <material><ambient>0.11 0.41 0.09 1</ambient><diffuse>0.13 0.45 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.10</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_05">
+    <static>true</static><pose>-5.0 1.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.1 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.15</radius><length>2.2</length></cylinder></geometry>
+        <material><ambient>0.31 0.18 0.06 1</ambient><diffuse>0.34 0.20 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.15</radius><length>2.2</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.0 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.25</radius></sphere></geometry>
+        <material><ambient>0.10 0.37 0.07 1</ambient><diffuse>0.12 0.42 0.09 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.25</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_06">
+    <static>true</static><pose>6.0 2.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.15 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.17</radius><length>2.3</length></cylinder></geometry>
+        <material><ambient>0.33 0.20 0.07 1</ambient><diffuse>0.36 0.22 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.17</radius><length>2.3</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.1 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.35</radius></sphere></geometry>
+        <material><ambient>0.10 0.39 0.08 1</ambient><diffuse>0.12 0.43 0.09 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.35</radius></sphere></collision>
+    </link>
+  </model>
+
+  <!-- Corridor trees (y=+4 to +8) -->
+  <model name="tree_07">
+    <static>true</static><pose>-7.0 5.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.2 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry>
+        <material><ambient>0.30 0.17 0.06 1</ambient><diffuse>0.33 0.19 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.3 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.45</radius></sphere></geometry>
+        <material><ambient>0.09 0.35 0.07 1</ambient><diffuse>0.11 0.39 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.45</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_08">
+    <static>true</static><pose>7.5 6.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.05 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.14</radius><length>2.1</length></cylinder></geometry>
+        <material><ambient>0.28 0.16 0.05 1</ambient><diffuse>0.31 0.18 0.06 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.14</radius><length>2.1</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 2.9 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.20</radius></sphere></geometry>
+        <material><ambient>0.11 0.40 0.08 1</ambient><diffuse>0.13 0.44 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.20</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_09">
+    <static>true</static><pose>-6.0 8.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.15 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.16</radius><length>2.3</length></cylinder></geometry>
+        <material><ambient>0.31 0.18 0.06 1</ambient><diffuse>0.34 0.20 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.16</radius><length>2.3</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.1 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.30</radius></sphere></geometry>
+        <material><ambient>0.10 0.37 0.07 1</ambient><diffuse>0.12 0.41 0.09 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.30</radius></sphere></collision>
+    </link>
+  </model>
+
+  <model name="tree_10">
+    <static>true</static><pose>6.5 8.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.0 0 0 0</pose>
       <visual name="v"><geometry><cylinder><radius>0.15</radius><length>2.0</length></cylinder></geometry>
-        <material><ambient>0.05 0.88 0.88 1</ambient><diffuse>0.05 0.88 0.88 1</diffuse>
-          <specular>0.05 0.7 0.7 1</specular></material></visual>
+        <material><ambient>0.30 0.17 0.06 1</ambient><diffuse>0.32 0.19 0.07 1</diffuse></material></visual>
       <collision name="c"><geometry><cylinder><radius>0.15</radius><length>2.0</length></cylinder></geometry></collision>
     </link>
-  </model>
-  <model name="landmark_NE">
-    <static>true</static><pose>8.0 7.0 1.0 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.15</radius><length>2.0</length></cylinder></geometry>
-        <material><ambient>0.88 0.08 0.88 1</ambient><diffuse>0.88 0.08 0.88 1</diffuse>
-          <specular>0.7 0.05 0.7 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.15</radius><length>2.0</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="landmark_SW">
-    <static>true</static><pose>-8.5 -7.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.15</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.20 0.90 0.20 1</ambient><diffuse>0.20 0.90 0.20 1</diffuse>
-          <specular>0.1 0.7 0.1 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.15</radius><length>1.2</length></cylinder></geometry></collision>
-    </link>
-  </model>
-  <model name="landmark_SE">
-    <static>true</static><pose>8.5 -7.0 0.6 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><cylinder><radius>0.15</radius><length>1.2</length></cylinder></geometry>
-        <material><ambient>0.92 0.90 0.08 1</ambient><diffuse>0.92 0.90 0.08 1</diffuse>
-          <specular>0.7 0.7 0.05 1</specular></material></visual>
-      <collision name="c"><geometry><cylinder><radius>0.15</radius><length>1.2</length></cylinder></geometry></collision>
+    <link name="foliage">
+      <pose>0 0 2.8 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.20</radius></sphere></geometry>
+        <material><ambient>0.11 0.39 0.08 1</ambient><diffuse>0.13 0.43 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.20</radius></sphere></collision>
     </link>
   </model>
 
-  <!-- SW visual cluster — SLAM feature richness in SW quadrant -->
-  <model name="obs_cluster_A">
-    <static>true</static><pose>-7.0 -1.5 0.4 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.6 0.6 0.8</size></box></geometry>
-        <material><ambient>0.42 0.18 0.65 1</ambient><diffuse>0.42 0.18 0.65 1</diffuse>
-          <specular>0.3 0.1 0.5 1</specular></material></visual>
-      <collision name="c"><geometry><box><size>0.6 0.6 0.8</size></box></geometry></collision>
+  <!-- Background trees beyond goal — distant SLAM landmarks -->
+  <model name="tree_bg_L">
+    <static>true</static><pose>-9.0 14.0 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.3 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.20</radius><length>2.6</length></cylinder></geometry>
+        <material><ambient>0.28 0.16 0.05 1</ambient><diffuse>0.30 0.18 0.06 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.20</radius><length>2.6</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.5 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.60</radius></sphere></geometry>
+        <material><ambient>0.08 0.32 0.06 1</ambient><diffuse>0.10 0.36 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.60</radius></sphere></collision>
     </link>
   </model>
-  <model name="obs_cluster_B">
-    <static>true</static><pose>-7.0 -2.5 0.3 0 0 0</pose>
-    <link name="link">
-      <visual name="v"><geometry><box><size>0.6 0.6 0.6</size></box></geometry>
-        <material><ambient>0.42 0.18 0.65 1</ambient><diffuse>0.42 0.18 0.65 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>0.6 0.6 0.6</size></box></geometry></collision>
+  <model name="tree_bg_R">
+    <static>true</static><pose>9.0 13.5 0 0 0 0</pose>
+    <link name="trunk">
+      <pose>0 0 1.2 0 0 0</pose>
+      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry>
+        <material><ambient>0.29 0.17 0.06 1</ambient><diffuse>0.31 0.19 0.07 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>2.4</length></cylinder></geometry></collision>
+    </link>
+    <link name="foliage">
+      <pose>0 0 3.2 0 0 0</pose>
+      <visual name="v"><geometry><sphere><radius>1.50</radius></sphere></geometry>
+        <material><ambient>0.09 0.34 0.07 1</ambient><diffuse>0.11 0.38 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>1.50</radius></sphere></collision>
     </link>
   </model>
-  <model name="obs_cluster_C">
-    <static>true</static><pose>-8.0 -2.0 0.25 0 0 0</pose>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       TERRAIN MOUNDS — elevated earth, exercises terrain_analysis_node
+       Each mound is a raised box (earth-brown) whose top face is
+       visible to the depth sensor at varying height:
+         mound_01: 0.35 m → terrain_analysis marks as "step hazard"
+         mound_02: 0.22 m → near threshold, marginal cost
+       ════════════════════════════════════════════════════════════════ -->
+  <model name="mound_01">
+    <static>true</static><pose>-6.5 -2.5 0.175 0 0 0</pose>
     <link name="link">
-      <visual name="v"><geometry><box><size>1.8 0.4 0.5</size></box></geometry>
-        <material><ambient>0.42 0.18 0.65 1</ambient><diffuse>0.42 0.18 0.65 1</diffuse></material></visual>
-      <collision name="c"><geometry><box><size>1.8 0.4 0.5</size></box></geometry></collision>
+      <visual name="v"><geometry><box><size>5.5 3.5 0.35</size></box></geometry>
+        <material><ambient>0.38 0.30 0.16 1</ambient><diffuse>0.40 0.32 0.17 1</diffuse>
+          <specular>0.04 0.03 0.02 1</specular></material></visual>
+      <collision name="c"><geometry><box><size>5.5 3.5 0.35</size></box></geometry></collision>
+    </link>
+  </model>
+  <!-- Mound top surface marker (slightly greener — sparse grass on raised earth) -->
+  <model name="mound_01_top">
+    <static>true</static><pose>-6.5 -2.5 0.355 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>5.4 3.4 0.01</size></box></geometry>
+        <material><ambient>0.36 0.42 0.20 1</ambient><diffuse>0.38 0.44 0.22 1</diffuse></material></visual>
+    </link>
+  </model>
+
+  <model name="mound_02">
+    <static>true</static><pose>7.0 3.5 0.11 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>4.5 4.0 0.22</size></box></geometry>
+        <material><ambient>0.37 0.29 0.15 1</ambient><diffuse>0.39 0.31 0.16 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>4.5 4.0 0.22</size></box></geometry></collision>
+    </link>
+  </model>
+  <model name="mound_02_top">
+    <static>true</static><pose>7.0 3.5 0.225 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>4.4 3.9 0.01</size></box></geometry>
+        <material><ambient>0.34 0.40 0.18 1</ambient><diffuse>0.36 0.42 0.20 1</diffuse></material></visual>
+    </link>
+  </model>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       DITCH SIMULATION — two raised ridges creating a depression
+       The "ditch" is the 0.8 m gap between ridges.
+       Visible to depth camera as two sharp 0.22 m height transitions.
+       terrain_analysis_node will mark the ridge edges as step hazards.
+       ════════════════════════════════════════════════════════════════ -->
+  <model name="ditch_ridge_W">
+    <static>true</static><pose>-3.0 1.2 0.11 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.3 4.0 0.22</size></box></geometry>
+        <material><ambient>0.35 0.27 0.12 1</ambient><diffuse>0.37 0.29 0.13 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.3 4.0 0.22</size></box></geometry></collision>
+    </link>
+  </model>
+  <model name="ditch_ridge_E">
+    <static>true</static><pose>3.0 1.2 0.11 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>0.3 4.0 0.22</size></box></geometry>
+        <material><ambient>0.35 0.27 0.12 1</ambient><diffuse>0.37 0.29 0.13 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.3 4.0 0.22</size></box></geometry></collision>
+    </link>
+  </model>
+  <!-- Ditch floor: slightly darker earth between ridges (visual) -->
+  <model name="ditch_floor">
+    <static>true</static><pose>0 1.2 0.002 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>5.6 4.0 0.004</size></box></geometry>
+        <material><ambient>0.30 0.24 0.10 1</ambient><diffuse>0.32 0.26 0.11 1</diffuse></material></visual>
+    </link>
+  </model>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       LOW BUSHES — small obstacles for YOLO detection variety
+       ════════════════════════════════════════════════════════════════ -->
+  <model name="bush_01">
+    <static>true</static><pose>-4.5 -6.0 0.22 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.50</radius></sphere></geometry>
+        <material><ambient>0.15 0.40 0.10 1</ambient><diffuse>0.17 0.44 0.11 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.50</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="bush_02">
+    <static>true</static><pose>4.8 -5.5 0.18 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.40</radius></sphere></geometry>
+        <material><ambient>0.14 0.38 0.09 1</ambient><diffuse>0.16 0.42 0.11 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.40</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="bush_03">
+    <static>true</static><pose>-8.0 4.5 0.20 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.45</radius></sphere></geometry>
+        <material><ambient>0.15 0.41 0.10 1</ambient><diffuse>0.17 0.45 0.12 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.45</radius></sphere></collision>
+    </link>
+  </model>
+  <model name="bush_04">
+    <static>true</static><pose>8.5 5.5 0.18 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><sphere><radius>0.38</radius></sphere></geometry>
+        <material><ambient>0.13 0.37 0.09 1</ambient><diffuse>0.15 0.41 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.38</radius></sphere></collision>
     </link>
   </model>
 
