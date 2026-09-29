@@ -8,9 +8,10 @@ Panels:
         - /SLAMMap1
         - /LocalCostmap1
         - /CameraDepthCloud1
+        - /CameraDepthCloud1/Status1
         - /RGBCamera1
       Splitter Ratio: 0.5
-    Tree Height: 428
+    Tree Height: 353
 Visualization Manager:
   Class: ""
   Displays:
@@ -197,7 +198,7 @@ Visualization Manager:
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 120; 30
       Color Transformer: FlatColor
-      Decay Time: 1.0
+      Decay Time: 1
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
@@ -320,7 +321,7 @@ Visualization Manager:
         Value: /odometry/filtered
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -332,9 +333,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /camera/image_raw
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -346,7 +347,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /perception/depth/colorized
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -362,7 +363,7 @@ Visualization Manager:
         Value: /perception/yolo/overlay
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -374,7 +375,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /perception/depth_ai/colorized
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -389,6 +390,13 @@ Visualization Manager:
     - Class: rviz_default_plugins/FocusCamera
     - Class: nav2_rviz_plugins/GoalTool
     - Class: nav2_rviz_plugins/NavThroughPosesTool
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: goal_pose
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -396,7 +404,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 12
+      Distance: 20.552265167236328
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -411,26 +419,26 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.75
+      Pitch: 0.7999997138977051
       Target Frame: base_footprint
       Value: Orbit (rviz)
-      Yaw: 3.140000104904175
+      Yaw: 2.2499916553497314
     Saved: ~
 Window Geometry:
-  AIDepth (Depth Anything V3 — enable_depth_viz:=true):
+  AIDepth  (Depth Anything V2 Metric — enable_depth_viz:=true):
     collapsed: false
   Displays:
     collapsed: false
   Height: 1011
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001ad00000395fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002902000003e100000084000001af00000063fb000000220059004f004c004f00480061007a006100720064004f007600650072006c00610079010000003f0000006c0000001700fffffffb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000b1000000710000001700fffffffb0000001200520047004200430061006d00650072006101000001280000006c0000001700fffffffb000000100044006900730070006c006100790073010000019a0000023a000000cc00ffffff000001ec0000039500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000002000000000000024000000395fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002902000003e100000084000001af00000063fb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000b1000000710000000000000000fc000001e3000001f10000000000fffffffaffffffff0100000002fb000000100044006900730070006c00610079007302000001b0000001e100000240000001f1fb0000001200520047004200430061006d0065007200610000000000000002400000008500fffffffb00000094005200650061006c004400650070007400680020002000280054005500520042004f00200063006f006c006f0072006d006100700020201400200062006c00750065003d006e006500610072002c00200067007200650065006e003d006d00690064002c0020007200650064003d006600610072002c00200062006c00610063006b003d0069006e00760061006c0069006400290000000104000001e90000001700fffffffb0000007800410049004400650070007400680020002000280044006500700074006800200041006e0079007400680069006e00670020005600320020004d006500740072006900630020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002900000001fa000001da0000001700ffffff000000020000073e00000107fc0100000001fb000000220059004f004c004f00480061007a006100720064004f007600650072006c0061007901000000000000073e000000be00ffffff0000073e0000028800000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   RGBCamera:
     collapsed: false
-  RealDepth (Gazebo sensor / hw relay):
+  RealDepth  (TURBO colormap — blue=near, green=mid, red=far, black=invalid):
     collapsed: false
-  Width: 927
-  X: 993
+  Width: 1854
+  X: 66
   Y: 32
   YOLOHazardOverlay:
     collapsed: false
