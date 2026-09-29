@@ -49,6 +49,9 @@ class YoloHazardSegmentationNode(Node):
             from ultralytics import YOLO
             self.model = YOLO(self.model_name)
             self.model.to(self.device_str)
+            # Apply FP16 at model level (correct approach — half= in predict() is deprecated)
+            if self.enable_fp16 and self.device_str != 'cpu':
+                self.model.model.half()
             self.yolo_available = True
             self.get_logger().info('YOLO segmentation model loaded successfully.')
         except Exception as e:
@@ -115,7 +118,6 @@ class YoloHazardSegmentationNode(Node):
                     source=cv_image,
                     conf=self.conf_thresh,
                     device=self.device_str,
-                    half=self.enable_fp16,
                     verbose=False
                 )
 

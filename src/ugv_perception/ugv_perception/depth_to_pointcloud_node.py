@@ -119,9 +119,13 @@ class DepthToPointCloudNode(Node):
             points = np.zeros((0, 3), dtype=np.float32)
 
         header = Header()
-        header.stamp    = msg.header.stamp
-        # Use the message frame_id (set to camera_link_optical by relay node).
-        # Fallback keeps existing behavior if relay is not running.
+        # Use current node clock time (not image timestamp) for the pointcloud header.
+        # When Fixed Frame = map, RViz looks up camera_link_optical→map TF at this stamp.
+        # RTAB-Map publishes map→odom TF timestamped at the RGBD frame time (with slight
+        # processing delay). Using the image stamp causes RViz to request a TF at T_image
+        # which may be slightly ahead of the latest RTAB-Map TF → "Error" status.
+        # Using now() ensures the TF lookup uses the latest available map→odom TF.
+        header.stamp    = self.get_clock().now().to_msg()
         header.frame_id = msg.header.frame_id if msg.header.frame_id else 'camera_link_optical'
 
         cloud_msg = pc2.create_cloud_xyz32(header, points)
