@@ -13,7 +13,7 @@ def generate_launch_description():
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     # Path to Tugbot in Warehouse world located inside ugv_sim
-    default_world = os.path.join(pkg_ugv_sim, 'worlds', 'tugbot_warehouse.sdf')
+    default_world = os.path.join(pkg_ugv_sim, 'worlds', 'ugv_test_arena.sdf')
     default_bridge_config = os.path.join(pkg_ugv_sim, 'config', 'gazebo_bridge.yaml')
 
     world_arg = DeclareLaunchArgument(

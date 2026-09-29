@@ -510,20 +510,5 @@
     <joint_name>right_wheel_joint</joint_name>
   </plugin>
 
-  <!-- ── Sensors System ─────────────────────────────────────────────────────
-       Required for camera and IMU sensors to update.
-       render_engine="ogre2" is MANDATORY for depth_camera in Gazebo Harmonic.
-       ogre (v1) does NOT support depth_camera sensor type. -->
-  <plugin filename="ignition-gazebo-sensors-system"
-          name="ignition::gazebo::systems::Sensors">
-    <render_engine>ogre2</render_engine>
-  </plugin>
-
-  <!-- ── IMU System ─────────────────────────────────────────────────────────
-       Required for IMU sensor data to be collected from the physics engine. -->
-  <plugin filename="ignition-gazebo-imu-system"
-          name="ignition::gazebo::systems::Imu">
-  </plugin>
-
 </model>
 </sdf>
