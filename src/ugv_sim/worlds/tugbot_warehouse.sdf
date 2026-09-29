@@ -199,10 +199,13 @@
       <pose>14.7 -10.6 -0.04 0 0 0</pose>
     </include>
 
+    <!-- Tugbot loaded from local model directory (not Fuel URL).
+         model://tugbot resolves via GZ_SIM_RESOURCE_PATH set in sim.launch.py,
+         which puts the ugv_sim install models directory first. This ensures all
+         local model.sdf modifications are applied (fixed light joint, etc.).
+         NEVER change back to the Fuel URL — it bypasses all local fixes. -->
     <include>
-      <uri>
-        https://fuel.ignitionrobotics.org/1.0/MovAi/models/Tugbot
-      </uri>
+      <uri>model://tugbot</uri>
       <name>tugbot</name>
       <!-- Spawn at a validated open aisle in the warehouse.
            (0,0) embedded the robot inside the Warehouse building's collision structure

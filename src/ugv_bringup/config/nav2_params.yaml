@@ -23,7 +23,10 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001   # diff-drive: Y is always ~0, use small threshold
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    # Increased from 0.3 → 1.0: Gazebo sim-clock jumps at startup and RTAB-Map
+    # publishes map→odom TF at only 1 Hz. Brief TF lookup failures lasting <0.3s
+    # were triggering controller failure and aborting navigation entirely.
+    failure_tolerance: 1.0
     progress_checker_plugin: "progress_checker"
     current_progress_checker: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
@@ -33,7 +36,9 @@ controller_server:
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.15
-      movement_time_allowance: 15.0
+      # Increased from 15.0 → 25.0: robot may pause during replanning or while
+      # waiting for stale costmap obstacles to clear. 15s was too tight.
+      movement_time_allowance: 25.0
 
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -44,21 +49,26 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.6
+      desired_linear_vel: 0.5
       lookahead_dist: 0.8
       min_lookahead_dist: 0.45
       max_lookahead_dist: 1.6
       lookahead_time: 1.2
       stateful: false
       rotate_to_heading_angular_vel: 0.8
-      transform_tolerance: 0.5
+      # Increased from 0.5 → 1.0: must match costmap transform_tolerance (1.0) to
+      # prevent TF lookup failures when RTAB-Map's 1Hz map→odom update is pending.
+      transform_tolerance: 1.0
       max_robot_pose_search_dist: 5.0
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.8
       use_interpolation: true
-      max_allowed_time_to_collision_up_to_fast_stop: 1.0
-      use_collision_detection: true
+      # Disabled collision detection: the costmap (ObstacleLayer + InflationLayer)
+      # already prevents collisions. Enabling RPP's own collision checker caused
+      # phantom stops from noisy depth point cloud data — the robot would stop even
+      # when the path was actually clear, then fail to recover within failure_tolerance.
+      use_collision_detection: false
       use_regulated_linear_velocity_scaling: true
       use_cost_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.9
@@ -136,10 +146,14 @@ local_costmap:
           max_obstacle_height: 2.5    # warehouse shelf height ~2m
           min_obstacle_height: 0.05   # ignore floor points below 5cm
           obstacle_range: 6.0         # mark obstacles within 6m camera range
-          raytrace_range: 8.0         # clear free space up to 8m
+          raytrace_range: 7.0         # clear free space up to 7m (slightly beyond mark range)
           sensor_frame: ""            # use point cloud's own frame_id (camera_link_optical)
           inf_is_valid: false
-          observation_persistence: 1.0  # keep observations 1s before clearing
+          # Reduced from 1.0 → 0.5: clears stale obstacles faster as robot turns.
+          # The front-facing camera can't see sideways. With 1.0s persistence,
+          # obstacles from the robot's previous orientation stayed too long, causing
+          # the planner to see a blocked path when it was actually clear.
+          observation_persistence: 0.5
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
