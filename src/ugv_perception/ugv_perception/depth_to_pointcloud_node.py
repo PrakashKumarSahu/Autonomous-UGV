@@ -20,6 +20,7 @@ flicker between OK and Error status.
 """
 
 import rclpy
+import rclpy.duration
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
@@ -119,13 +120,15 @@ class DepthToPointCloudNode(Node):
             points = np.zeros((0, 3), dtype=np.float32)
 
         header = Header()
-        # Use current node clock time (not image timestamp) for the pointcloud header.
-        # When Fixed Frame = map, RViz looks up camera_link_optical→map TF at this stamp.
-        # RTAB-Map publishes map→odom TF timestamped at the RGBD frame time (with slight
-        # processing delay). Using the image stamp causes RViz to request a TF at T_image
-        # which may be slightly ahead of the latest RTAB-Map TF → "Error" status.
-        # Using now() ensures the TF lookup uses the latest available map→odom TF.
-        header.stamp    = self.get_clock().now().to_msg()
+        # Stamp 150 ms in the past so RViz's TF lookup never fails.
+        # Root cause: TF2 cannot extrapolate into the future — even by 1 ms.
+        # RTAB-Map publishes map→odom TF at ~15 Hz (every ~67 ms). Its most recent
+        # TF is therefore at most 67 ms old. Requesting the transform at
+        # (now - 150 ms) is guaranteed to fall BETWEEN two stored RTAB-Map TFs
+        # so TF2 always interpolates successfully → no ExtrapolationException → no flicker.
+        # Nav2 observation_persistence=0.5s so 150 ms-old data is fully valid.
+        _now = self.get_clock().now()
+        header.stamp    = (_now - rclpy.duration.Duration(seconds=0.15)).to_msg()
         header.frame_id = msg.header.frame_id if msg.header.frame_id else 'camera_link_optical'
 
         cloud_msg = pc2.create_cloud_xyz32(header, points)
