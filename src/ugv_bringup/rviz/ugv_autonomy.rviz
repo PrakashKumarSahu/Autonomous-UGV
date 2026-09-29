@@ -5,17 +5,19 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /RobotModel1
         - /SLAMMap1
-        - /LocalCostmap1
+        - /TerrainGrid1
         - /CameraDepthCloud1
         - /CameraDepthCloud1/Status1
-        - /RGBCamera1
+        - /GlobalPlan1
+        - /LocalPlan1
       Splitter Ratio: 0.5
-    Tree Height: 353
+    Tree Height: 553
 Visualization Manager:
   Class: ""
   Displays:
-    - Alpha: 0.5
+    - Alpha: 0.4
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
@@ -30,9 +32,10 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 30
+      Plane Cell Count: 40
       Reference Frame: <Fixed Frame>
       Value: true
+
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
       Collision Enabled: false
@@ -51,49 +54,6 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
-        base_footprint:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        camera_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        camera_link_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        front_caster_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        imu_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        left_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        rear_caster_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        right_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
       Mass Properties:
         Inertia: false
         Mass: false
@@ -102,6 +62,7 @@ Visualization Manager:
       Update Interval: 0
       Value: true
       Visual Enabled: true
+
     - Class: rviz_default_plugins/TF
       Enabled: false
       Filter (blacklist): ""
@@ -113,11 +74,12 @@ Visualization Manager:
       Name: TF
       Show Arrows: false
       Show Axes: true
-      Show Names: false
-      Tree:
-        {}
+      Show Names: true
+      Tree: {}
       Update Interval: 0
       Value: false
+
+    # ─── SLAM MAP ─────────────────────────────────────────────────────
     - Alpha: 0.699999988079071
       Binary representation: false
       Binary threshold: 100
@@ -141,7 +103,36 @@ Visualization Manager:
         Value: /map_updates
       Use Timestamp: false
       Value: true
-    - Alpha: 0.699999988079071
+
+    # ─── TERRAIN TRAVERSABILITY GRID ─────────────────────────────────
+    # Published by terrain_analysis_node. base_footprint frame.
+    # Color: costmap (black=free, shades→obstacles, white=lethal)
+    - Alpha: 0.750000000000000
+      Binary representation: false
+      Binary threshold: 50
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: TerrainGrid
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /terrain/traversability_grid
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /terrain/traversability_grid_updates
+      Use Timestamp: false
+      Value: true
+
+    # ─── COSTMAPS ────────────────────────────────────────────────────
+    - Alpha: 0.5
       Binary representation: false
       Binary threshold: 100
       Class: rviz_default_plugins/Map
@@ -164,7 +155,8 @@ Visualization Manager:
         Value: /local_costmap/costmap_updates
       Use Timestamp: false
       Value: true
-    - Alpha: 0.30000001192092896
+
+    - Alpha: 0.25
       Binary representation: false
       Binary threshold: 100
       Class: rviz_default_plugins/Map
@@ -187,6 +179,12 @@ Visualization Manager:
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
       Value: true
+
+    # ─── DEPTH POINT CLOUD (height-colored terrain elevation) ────────
+    # Color Transformer: AxisColor Z
+    #   Blue (Z≈0m) = ground level
+    #   Green/yellow (Z=0.2–1.0m) = rocks, mounds, ditch ridges
+    #   Red (Z≥1.5m) = trees, tall obstacles
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -220,6 +218,8 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+
+    # ─── RTAB-MAP DENSE CLOUD ────────────────────────────────────────
     - Alpha: 0.800000011920929
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -253,16 +253,18 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+
+    # ─── NAV2 PATHS ──────────────────────────────────────────────────
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
-      Color: 0; 255; 0
+      Color: 0; 220; 0
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Lines
-      Line Width: 0.05000000074505806
+      Line Width: 0.07
       Name: GlobalPlan
       Offset:
         X: 0
@@ -281,6 +283,37 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /plan
       Value: true
+
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 0; 128; 255
+      Enabled: true
+      Head Diameter: 0.20000000298023224
+      Head Length: 0.15000000298023224
+      Length: 0.20000000298023224
+      Line Style: Lines
+      Line Width: 0.04
+      Name: LocalPlan
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 100; 200; 255
+      Pose Style: None
+      Radius: 0.02
+      Shaft Diameter: 0.07
+      Shaft Length: 0.07
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_plan
+      Value: true
+
+    # ─── ODOMETRY TRAIL ──────────────────────────────────────────────
     - Angle Tolerance: 0.10000000149011612
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -320,8 +353,10 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /odometry/filtered
       Value: true
+
+    # ─── IMAGE PANELS ─────────────────────────────────────────────────
     - Class: rviz_default_plugins/Image
-      Enabled: false
+      Enabled: true
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -333,13 +368,14 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /camera/image_raw
-      Value: false
+      Value: true
+
     - Class: rviz_default_plugins/Image
-      Enabled: false
+      Enabled: true
       Max Value: 1
       Median window: 5
       Min Value: 0
-      Name: RealDepth  (TURBO colormap — blue=near, green=mid, red=far, black=invalid)
+      Name: DepthColorized
       Normalize Range: false
       Topic:
         Depth: 1
@@ -347,7 +383,8 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /perception/depth/colorized
-      Value: false
+      Value: true
+
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -362,12 +399,28 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /perception/yolo/overlay
       Value: true
+
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: HazardMask
+      Normalize Range: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /perception/hazard_mask
+      Value: true
+
     - Class: rviz_default_plugins/Image
       Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
-      Name: AIDepth  (Depth Anything V2 Metric — enable_depth_viz:=true)
+      Name: AIDepth
       Normalize Range: false
       Topic:
         Depth: 1
@@ -376,9 +429,10 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /perception/depth_ai/colorized
       Value: false
+
   Enabled: true
   Global Options:
-    Background Color: 48; 48; 48
+    Background Color: 38; 38; 38
     Fixed Frame: map
     Frame Rate: 30
   Name: root
@@ -399,12 +453,12 @@ Visualization Manager:
         Value: goal_pose
   Transformation:
     Current:
-      Class: rviz_default_plugins/TF
+      Class: rviz_plugins_tf2/TF2
   Value: true
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 20.552265167236328
+      Distance: 22.0
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -425,17 +479,37 @@ Visualization Manager:
       Yaw: 2.2499916553497314
     Saved: ~
 Window Geometry:
-  AIDepth  (Depth Anything V2 Metric — enable_depth_viz:=true):
+  AIDepth:
+    collapsed: false
+  CameraDepthCloud:
+    collapsed: false
+  Depth Colorized:
     collapsed: false
   Displays:
+    collapsed: false
+  GlobalCostmap:
+    collapsed: false
+  GlobalPlan:
+    collapsed: false
+  HazardMask:
     collapsed: false
   Height: 1011
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000002000000000000024000000395fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002902000003e100000084000001af00000063fb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000b1000000710000000000000000fc000001e3000001f10000000000fffffffaffffffff0100000002fb000000100044006900730070006c00610079007302000001b0000001e100000240000001f1fb0000001200520047004200430061006d0065007200610000000000000002400000008500fffffffb00000094005200650061006c004400650070007400680020002000280054005500520042004f00200063006f006c006f0072006d006100700020201400200062006c00750065003d006e006500610072002c00200067007200650065006e003d006d00690064002c0020007200650064003d006600610072002c00200062006c00610063006b003d0069006e00760061006c0069006400290000000104000001e90000001700fffffffb0000007800410049004400650070007400680020002000280044006500700074006800200041006e0079007400680069006e00670020005600320020004d006500740072006900630020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002900000001fa000001da0000001700ffffff000000020000073e00000107fc0100000001fb000000220059004f004c004f00480061007a006100720064004f007600650072006c0061007901000000000000073e000000be00ffffff0000073e0000028800000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  LocalCostmap:
+    collapsed: false
+  LocalPlan:
+    collapsed: false
+  OdometryTrail:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd000000020000000000000118000003c6fc0200000002fb000000100044006900730070006c006100790073010000003d0000011e0000009700fffffffb000000220059004f004c004f00480061007a006100720064004f007600650072006c00610079010000016100000198000000be00ffffff000000010000010f000003c6fc0200000003fb0000001200520047004200430061006d006500720061010000000000000118000000870000005cfb000000160044006500700074006800430061006d0065007201000001190000011800000087000000005fb0000001a004800610077006100720064004d00610073006b01000002310000014d000000be00ffffff00000001000003c6000003c6fc0200000000000003c600000107fc01000000020000000000fffffffaffffffff0200000000000000020000000a0054006f006f006c00730100000000ffffffff0000000000000000
   RGBCamera:
     collapsed: false
-  RealDepth  (TURBO colormap — blue=near, green=mid, red=far, black=invalid):
+  RTABMapCloud:
+    collapsed: false
+  SLAMMap:
+    collapsed: false
+  TerrainGrid:
     collapsed: false
   Width: 1854
   X: 66

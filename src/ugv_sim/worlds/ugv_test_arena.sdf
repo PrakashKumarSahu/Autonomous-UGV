@@ -425,5 +425,123 @@
   <model name="bush_04"><static>true</static><pose>8.5 5.5 0.18 0 0 0</pose>
     <link name="link"><visual name="v"><geometry><sphere><radius>0.38</radius></sphere></geometry><material><ambient>0.13 0.37 0.09 1</ambient><diffuse>0.15 0.41 0.10 1</diffuse></material></visual><collision name="c"><geometry><sphere><radius>0.38</radius></sphere></geometry></collision></link></model>
 
+  <!-- ════ NAVIGATION WAYPOINT CONES ─────────────────────────────────────────
+       3 orange cones at key decision points along the A→B path.
+       Visible to YOLO + depth sensor; help SLAM with repeatable landmarks.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <model name="wp_cone_1"><static>true</static><pose>0 -2.5 0.25 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry>
+        <material><ambient>0.95 0.45 0.05 1</ambient><diffuse>0.95 0.45 0.05 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry></collision>
+      <!-- White top stripe -->
+      <visual name="stripe"><pose>0 0 0.27 0 0 0</pose>
+        <geometry><cylinder><radius>0.13</radius><length>0.06</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+    </link></model>
+
+  <model name="wp_cone_2"><static>true</static><pose>0 3.5 0.25 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry>
+        <material><ambient>0.95 0.45 0.05 1</ambient><diffuse>0.95 0.45 0.05 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry></collision>
+      <visual name="stripe"><pose>0 0 0.27 0 0 0</pose>
+        <geometry><cylinder><radius>0.13</radius><length>0.06</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+    </link></model>
+
+  <model name="wp_cone_3"><static>true</static><pose>0 8.5 0.25 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry>
+        <material><ambient>0.95 0.45 0.05 1</ambient><diffuse>0.95 0.45 0.05 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.12</radius><length>0.50</length></cylinder></geometry></collision>
+      <visual name="stripe"><pose>0 0 0.27 0 0 0</pose>
+        <geometry><cylinder><radius>0.13</radius><length>0.06</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material></visual>
+    </link></model>
+
+  <!-- ════ FALLEN LOG — horizontal cylinder as natural obstacle ════════════ -->
+  <model name="fallen_log"><static>true</static><pose>4.5 2.0 0.18 1.5708 0 0.6</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.18</radius><length>2.80</length></cylinder></geometry>
+        <material><ambient>0.35 0.22 0.09 1</ambient><diffuse>0.38 0.24 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.18</radius><length>2.80</length></cylinder></geometry></collision>
+    </link></model>
+
+  <!-- ════ SIMULATED STREAM — flat blue tile shows water crossing ═══════════
+       Visible to depth sensor as near-zero height (traversable but slippery).
+       terrain_analysis_node will mark it as low-cost if flat.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <model name="stream"><static>true</static><pose>-4.5 5.5 0.004 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>5.0 1.2 0.008</size></box></geometry>
+        <material><ambient>0.15 0.45 0.75 1</ambient><diffuse>0.18 0.48 0.80 1</diffuse>
+          <specular>0.5 0.7 0.9 1</specular></material></visual>
+    </link></model>
+  <!-- Stream bank ridges — 0.08m steps visible to terrain_analysis_node -->
+  <model name="stream_bank_N"><static>true</static><pose>-4.5 6.15 0.04 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>5.0 0.12 0.08</size></box></geometry>
+        <material><ambient>0.38 0.28 0.12 1</ambient><diffuse>0.40 0.30 0.13 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>5.0 0.12 0.08</size></box></geometry></collision>
+    </link></model>
+  <model name="stream_bank_S"><static>true</static><pose>-4.5 4.85 0.04 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>5.0 0.12 0.08</size></box></geometry>
+        <material><ambient>0.38 0.28 0.12 1</ambient><diffuse>0.40 0.30 0.13 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>5.0 0.12 0.08</size></box></geometry></collision>
+    </link></model>
+
+  <!-- ════ STEP HILL — 2-level terrain ramp (exercises terrain_analysis) ════
+       Two stacked earth boxes: lower (0.20m) + upper (0.40m).
+       The depth sensor will see a step change → terrain_analysis marks it.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <model name="hill_base"><static>true</static><pose>-8.5 8.0 0.10 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>3.0 4.0 0.20</size></box></geometry>
+        <material><ambient>0.38 0.30 0.15 1</ambient><diffuse>0.40 0.32 0.16 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>3.0 4.0 0.20</size></box></geometry></collision>
+      <visual name="top"><pose>0 0 0.105 0 0 0</pose>
+        <geometry><box><size>3.0 4.0 0.01</size></box></geometry>
+        <material><ambient>0.35 0.42 0.18 1</ambient><diffuse>0.37 0.44 0.20 1</diffuse></material></visual>
+    </link></model>
+  <model name="hill_peak"><static>true</static><pose>-8.5 9.0 0.40 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><box><size>2.0 2.0 0.40</size></box></geometry>
+        <material><ambient>0.36 0.28 0.13 1</ambient><diffuse>0.38 0.30 0.14 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>2.0 2.0 0.40</size></box></geometry></collision>
+      <visual name="top"><pose>0 0 0.205 0 0 0</pose>
+        <geometry><box><size>2.0 2.0 0.01</size></box></geometry>
+        <material><ambient>0.32 0.40 0.16 1</ambient><diffuse>0.34 0.42 0.18 1</diffuse></material></visual>
+    </link></model>
+
+  <!-- ════ FIELD BOUNDARY POSTS — 4 red posts at field limits ══════════════
+       Far visual SLAM landmarks. Keeps robot aware of field boundaries.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <model name="boundary_NW"><static>true</static><pose>-12 14 0.75 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.90 0.10 0.10 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry></collision>
+    </link></model>
+  <model name="boundary_NE"><static>true</static><pose>12 14 0.75 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.90 0.10 0.10 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry></collision>
+    </link></model>
+  <model name="boundary_SW"><static>true</static><pose>-12 -10 0.75 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.90 0.10 0.10 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry></collision>
+    </link></model>
+  <model name="boundary_SE"><static>true</static><pose>12 -10 0.75 0 0 0</pose>
+    <link name="link">
+      <visual name="v"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.90 0.10 0.10 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>1.5</length></cylinder></geometry></collision>
+    </link></model>
+
 </world>
 </sdf>
