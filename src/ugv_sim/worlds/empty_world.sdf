@@ -1,0 +1,197 @@
+<?xml version='1.0' encoding='ASCII'?>
+<!--
+  empty_world.sdf — Minimal Gazebo world for custom testing
+  ═══════════════════════════════════════════════════════════════════════════
+  ZERO FUEL/INTERNET DEPENDENCIES. Everything is inline SDF.
+
+  PURPOSE: A clean, obstacle-free environment for:
+    - Testing robot spawning in a custom world
+    - Verifying sensor pipelines before adding obstacles
+    - Benchmarking navigation without environment complexity
+    - Template for building your own world (copy + add obstacles)
+
+  USAGE:
+    ros2 launch ugv_bringup ugv_complete.launch.py \
+      world:=$(ros2 pkg prefix ugv_sim)/share/ugv_sim/worlds/empty_world.sdf \
+      world_name:=empty \
+      spawn_x:=0.0  spawn_y:=0.0  spawn_yaw:=0.0
+
+  HOW TO USE WITH A COMPLETELY CUSTOM WORLD:
+    1. Create your world SDF (see this file as a template)
+    2. Set world name: <world name="my_world"> (pick any name)
+    3. Do NOT include the robot in your world — it is spawned via launch arg
+    4. Launch:
+         ros2 launch ugv_bringup ugv_complete.launch.py \
+           world:=/absolute/path/to/my_world.sdf \
+           world_name:=my_world \
+           spawn_x:=<x>  spawn_y:=<y>  spawn_yaw:=<yaw>
+
+  WORLD NAME: "empty"
+    Must match world_name:=empty launch argument.
+    GZ topic paths will be: /world/empty/model/localbot/link/...
+-->
+<sdf version='1.7'>
+<world name='empty'>
+
+  <!-- ── Physics & systems ─────────────────────────────────────────── -->
+  <gravity>0 0 -9.8</gravity>
+  <physics type='ode'>
+    <max_step_size>0.004</max_step_size>
+    <real_time_factor>1</real_time_factor>
+    <max_contacts>10</max_contacts>
+  </physics>
+
+  <plugin name='ignition::gazebo::systems::Physics'
+          filename='libignition-gazebo-physics-system.so'/>
+  <plugin name='ignition::gazebo::systems::UserCommands'
+          filename='libignition-gazebo-user-commands-system.so'/>
+  <plugin name='ignition::gazebo::systems::SceneBroadcaster'
+          filename='libignition-gazebo-scene-broadcaster-system.so'/>
+  <plugin name='ignition::gazebo::systems::Imu'
+          filename='ignition-gazebo-imu-system'/>
+  <plugin name='ignition::gazebo::systems::Sensors'
+          filename='ignition-gazebo-sensors-system'>
+    <render_engine>ogre2</render_engine>
+  </plugin>
+
+  <!-- ── GUI ───────────────────────────────────────────────────────── -->
+  <gui fullscreen="0">
+    <plugin filename="GzScene3D" name="3D View">
+      <ignition-gui>
+        <title>3D View</title>
+        <property type="bool" key="showTitleBar">false</property>
+        <property type="string" key="state">docked</property>
+      </ignition-gui>
+      <engine>ogre2</engine>
+      <scene>scene</scene>
+      <ambient_light>0.4 0.4 0.4</ambient_light>
+      <background_color>0.5 0.6 0.8</background_color>
+      <camera_pose>0 -8 6 0 0.6 1.5708</camera_pose>
+    </plugin>
+    <plugin filename="WorldControl" name="World control">
+      <ignition-gui>
+        <property type="bool" key="showTitleBar">false</property>
+        <property type="bool" key="resizable">false</property>
+        <property type="double" key="height">72</property>
+        <property type="double" key="width">121</property>
+        <property type="string" key="state">floating</property>
+        <anchors target="3D View">
+          <line own="left" target="left"/>
+          <line own="bottom" target="bottom"/>
+        </anchors>
+      </ignition-gui>
+      <play_pause>true</play_pause>
+      <step>true</step>
+      <start_paused>false</start_paused>
+    </plugin>
+    <plugin filename="WorldStats" name="World stats">
+      <ignition-gui>
+        <property type="bool" key="showTitleBar">false</property>
+        <property type="bool" key="resizable">false</property>
+        <property type="double" key="height">110</property>
+        <property type="double" key="width">290</property>
+        <property type="string" key="state">floating</property>
+        <anchors target="3D View">
+          <line own="right" target="right"/>
+          <line own="bottom" target="bottom"/>
+        </anchors>
+      </ignition-gui>
+      <sim_time>true</sim_time>
+      <real_time>true</real_time>
+      <real_time_factor>true</real_time_factor>
+      <iterations>true</iterations>
+    </plugin>
+    <plugin filename="EntityTree" name="Entity tree"/>
+    <plugin filename="Teleop" name="Teleop">
+      <ignition-gui>
+        <property key="width" type="double">400</property>
+        <property key="height" type="double">900</property>
+        <property key="state" type="string">docked</property>
+      </ignition-gui>
+      <topic>/model/localbot/cmd_vel</topic>
+    </plugin>
+  </gui>
+
+  <!-- ── Scene & lighting ──────────────────────────────────────────── -->
+  <scene>
+    <ambient>0.6 0.6 0.6 1</ambient>
+    <background>0.5 0.6 0.8 1</background>
+    <shadows>0</shadows>
+    <grid>false</grid>
+  </scene>
+
+  <light type="directional" name="sun">
+    <cast_shadows>0</cast_shadows>
+    <pose>0 0 10 0 0 0</pose>
+    <diffuse>1 1 1 1</diffuse>
+    <specular>0.3 0.3 0.3 1</specular>
+    <direction>-0.5 0.1 -0.9</direction>
+  </light>
+
+  <!-- ── Ground plane (inline, no Fuel) ───────────────────────────── -->
+  <model name="ground_plane">
+    <static>true</static>
+    <link name="link">
+      <collision name="collision">
+        <geometry>
+          <plane><normal>0 0 1</normal><size>200 200</size></plane>
+        </geometry>
+        <surface>
+          <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          <contact><ode/></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <plane><normal>0 0 1</normal><size>200 200</size></plane>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>0.8 0.8 0.8 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+
+  <!--
+  ═══════════════════════════════════════════════════════════════════════
+  ADD YOUR OBSTACLES HERE
+  ═══════════════════════════════════════════════════════════════════════
+  Copy-paste this template for each obstacle:
+
+  <model name="my_box">
+    <static>true</static>
+    <pose>X Y Z 0 0 0</pose>        <!-- X=East, Y=North, Z=Up (centre) -->
+    <link name="link">
+      <visual name="v">
+        <geometry><box><size>W D H</size></box></geometry>
+        <material><ambient>R G B 1</ambient><diffuse>R G B 1</diffuse></material>
+      </visual>
+      <collision name="c">
+        <geometry><box><size>W D H</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+
+  For cylinders:
+  <model name="my_cylinder">
+    <static>true</static>
+    <pose>X Y Z 0 0 0</pose>
+    <link name="link">
+      <visual name="v">
+        <geometry><cylinder><radius>R</radius><length>H</length></cylinder></geometry>
+      </visual>
+      <collision name="c">
+        <geometry><cylinder><radius>R</radius><length>H</length></cylinder></geometry>
+      </collision>
+    </link>
+  </model>
+
+  NOTE: Robot is NOT included here — spawned via sim.launch.py args.
+  ═══════════════════════════════════════════════════════════════════════
+  -->
+
+</world>
+</sdf>

@@ -3,51 +3,49 @@
   ugv_test_arena.sdf — Project-native test world for Autonomous UGV
   ═══════════════════════════════════════════════════════════════════════════
   ZERO FUEL/INTERNET DEPENDENCIES:
-    - Ground plane: inline <plane> geometry (not model://ground_plane from Fuel)
-    - All obstacles: inline SDF box/cylinder/sphere primitives
-    - Robot: model://localbot (resolved from GZ_SIM_RESOURCE_PATH → local files)
+    Ground plane, all obstacles, and lighting are inline SDF primitives.
 
-  WHY THE OLD WAREHOUSE WORLD CRASHED:
-    The old world (tugbot_warehouse.sdf) included ~8 models from Fuel:
-      https://fuel.ignitionrobotics.org/1.0/OpenRobotics/models/Warehouse
-      https://fuel.ignitionrobotics.org/1.0/OpenRobotics/models/Cart-Model-2
-      ... etc.
-    These trigger HTTP requests on every launch. A timeout, DNS failure, or
-    cache corruption causes Gazebo to abort the world loading and exit.
+  ROBOT IS NOT IN THIS FILE.
+  Localbot is spawned separately by sim.launch.py using ros_gz_sim create.
+  This keeps the world fully reusable for any robot configuration.
 
   WORLD NAME: "world_demo"
-    MUST match the world name in gazebo_bridge.yaml (GZ topic paths use it).
-    Do NOT rename without updating all /world/world_demo/... topic strings.
+    Must match the world_name launch argument in sim.launch.py (default='world_demo').
+    All GZ sensor topic paths use this name. Change via:
+      ros2 launch ugv_bringup ugv_complete.launch.py world_name:=<your_name>
+    (as long as this file's <world name="..."> also matches)
 
   TEST ARENA LAYOUT (top-down, X=East, Y=North):
     ┌──────────────────────────────────────────────────────────────┐
     │ NORTH WALL                                                    │ Y=+8
     │                                                               │
-    │  [Cyl_NW]           [Shelf_Wall]           [Cyl_NE]          │ Y=+5
-    │   (-4,5)            (0, 5.2) 6m wide         (4,5)           │
+    │  [Cyl_NW]       ████████████ Shelf Wall █████████   [Cyl_NE] │ Y=+5
+    │   (-4.5,5)          (0, 5.2) 6m long              (4.5,5)   │
     │                                                               │
-    │   [Box_L2]    open                 open     [Box_R2]          │ Y=+2
-    │   (-6,2)                                     (6,2)            │
+    │   [Box_L2]    open aisle (~7m)               [Box_R2]        │ Y=+2
+    │   (-6.5,2)                                     (6.5,2)       │
     │                                                               │
-    │             [Cyl_CL]  [Box_C]  [Cyl_CR]                     │ Y= 0
-    │              (-3,0)   (0,-0.5)   (3,0)                       │
+    │         [Cyl_CL]  [Box_C (red)]  [Cyl_CR]                   │ Y=-0.5
+    │          (-3.5,0)   (0,-0.5)       (3.5,0)                   │
     │                                                               │
-    │   [Box_L1]                               [Box_R1]            │ Y=-3
-    │   (-4,-3)                                  (4,-3)             │
+    │   [Box_L1]                                   [Box_R1]        │ Y=-3
+    │   (-4,-3)                                     (4,-3)          │
     │                                                               │
-    │                     [Box_Start]                              │ Y=-5
-    │                     (2, -5)                                   │
-    │         ↑ ROBOT SPAWNS HERE (0, -6.5)                        │ Y=-6.5
+    │              [Box_Start]      <- first obstacle               │ Y=-5
+    │              (2.5,-5)                                         │
+    │    ROBOT SPAWNS HERE (0,-6.5,yaw=π/2) via sim.launch.py ↑   │ Y=-6.5
     │ SOUTH WALL                                                    │ Y=-8
     └──────────────────────────────────────────────────────────────┘
     X=-10                                                         X=+10
 
-  NAVIGATION TEST GOALS (frame_id: map):
-    Goal 1 (forward): x=0, y=6, z=0     — through all obstacle rows
-    Goal 2 (NW):      x=-7, y=5, z=0    — left side corridor
-    Goal 3 (NE):      x=7, y=5, z=0     — right side (near shelf wall)
-    Goal 4 (center):  x=0, y=0, z=0     — middle of arena
-    Goal 5 (start):   x=0, y=-4, z=0    — short forward test
+  SUGGESTED NAVIGATION TEST GOALS (after SLAM map builds):
+    ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+      '{pose: {header: {frame_id: "map"}, pose: {position: {x: 0.0, y: 6.0, z: 0.0}, orientation: {w: 1.0}}}}'
+
+    Goal A: x=0,  y=6   — north through all 5 obstacle rows
+    Goal B: x=-7, y=5   — NW side corridor
+    Goal C: x=7,  y=5   — NE side (near L-wall pocket)
+    Goal D: x=0,  y=0   — arena center (zigzag section)
 -->
 <sdf version='1.7'>
 <world name='world_demo'>
@@ -57,12 +55,11 @@
        ══════════════════════════════════════════════════════════════════ -->
   <gravity>0 0 -9.8</gravity>
   <physics type='ode'>
-    <max_step_size>0.004</max_step_size>   <!-- 250 Hz physics — stable for diff-drive -->
+    <max_step_size>0.004</max_step_size>   <!-- 250 Hz physics — stable for diff-drive wheels -->
     <real_time_factor>1</real_time_factor>
     <max_contacts>10</max_contacts>
   </physics>
 
-  <!-- Core simulation systems — required for basic operation -->
   <plugin name='ignition::gazebo::systems::Physics'
           filename='libignition-gazebo-physics-system.so'/>
   <plugin name='ignition::gazebo::systems::UserCommands'
@@ -70,14 +67,12 @@
   <plugin name='ignition::gazebo::systems::SceneBroadcaster'
           filename='libignition-gazebo-scene-broadcaster-system.so'/>
 
-  <!-- IMU system: processes imu sensor entities in the world.
-       MUST be at world level — NOT model level. -->
+  <!-- IMU system — MUST be at world level (processes all imu sensor entities) -->
   <plugin name='ignition::gazebo::systems::Imu'
           filename='ignition-gazebo-imu-system'/>
 
-  <!-- Sensors system: processes camera/depth sensors in the world.
-       MUST be at world level — NOT model level.
-       ogre2: required for depth_camera in Gazebo Harmonic (ogre v1 = no depth). -->
+  <!-- Sensors system — MUST be at world level.
+       ogre2: required for depth_camera in Gazebo Harmonic; ogre v1 does NOT support it. -->
   <plugin name='ignition::gazebo::systems::Sensors'
           filename='ignition-gazebo-sensors-system'>
     <render_engine>ogre2</render_engine>
@@ -88,7 +83,6 @@
        ══════════════════════════════════════════════════════════════════ -->
   <gui fullscreen="0">
 
-    <!-- 3D viewport — camera positioned to show full arena from above-front -->
     <plugin filename="GzScene3D" name="3D View">
       <ignition-gui>
         <title>3D View</title>
@@ -99,11 +93,10 @@
       <scene>scene</scene>
       <ambient_light>0.4 0.4 0.4</ambient_light>
       <background_color>0.6 0.7 0.9</background_color>
-      <!-- Camera overview position: above and slightly south of arena center -->
-      <camera_pose>0 -15 12 0 0.8 1.5708</camera_pose>
+      <!-- Camera: overview from south-west, looking north-east across arena -->
+      <camera_pose>-5 -14 10 0 0.65 1.3</camera_pose>
     </plugin>
 
-    <!-- World control (play/pause/step) -->
     <plugin filename="WorldControl" name="World control">
       <ignition-gui>
         <title>World control</title>
@@ -120,11 +113,10 @@
       </ignition-gui>
       <play_pause>true</play_pause>
       <step>true</step>
-      <!-- NOT paused at start — robot must run immediately for sensor data -->
+      <!-- NOT paused: sensors need to start immediately for camera/depth data -->
       <start_paused>false</start_paused>
     </plugin>
 
-    <!-- World statistics (sim time, RTF) -->
     <plugin filename="WorldStats" name="World stats">
       <ignition-gui>
         <title>World stats</title>
@@ -145,7 +137,6 @@
       <iterations>true</iterations>
     </plugin>
 
-    <!-- Transform controls (move/rotate models in GUI) -->
     <plugin filename="TransformControl" name="Transform control">
       <ignition-gui>
         <property type="string" key="state">floating</property>
@@ -156,10 +147,11 @@
       </ignition-gui>
     </plugin>
 
-    <!-- Entity tree (hierarchy browser) -->
     <plugin filename="EntityTree" name="Entity tree"/>
 
-    <!-- Teleop GUI — keyboard cmd_vel control from Gazebo GUI -->
+    <!-- Teleop widget — keyboard/slider control from Gazebo GUI.
+         Topic matches the default robot_name (localbot).
+         If robot_name launch arg is changed, update this topic accordingly. -->
     <plugin filename="Teleop" name="Teleop">
       <ignition-gui>
         <property key="x" type="double">0</property>
@@ -179,11 +171,10 @@
   <scene>
     <ambient>0.6 0.6 0.6 1</ambient>
     <background>0.6 0.7 0.9 1</background>
-    <shadows>0</shadows>   <!-- shadows off = faster rendering, less GPU load -->
+    <shadows>0</shadows>
     <grid>false</grid>
   </scene>
 
-  <!-- Main directional light (sun equivalent) -->
   <light type="directional" name="sun">
     <cast_shadows>0</cast_shadows>
     <pose>0 0 10 0 0 0</pose>
@@ -191,14 +182,11 @@
     <specular>0.3 0.3 0.3 1</specular>
     <direction>-0.5 0.1 -0.9</direction>
     <attenuation>
-      <range>1000</range>
-      <constant>0.9</constant>
-      <linear>0.01</linear>
-      <quadratic>0.001</quadratic>
+      <range>1000</range><constant>0.9</constant>
+      <linear>0.01</linear><quadratic>0.001</quadratic>
     </attenuation>
   </light>
 
-  <!-- Overhead fill light (prevents harsh shadows under obstacles) -->
   <light type="directional" name="fill_light">
     <cast_shadows>0</cast_shadows>
     <pose>0 0 8 0 0 0</pose>
@@ -215,31 +203,19 @@
     <link name="link">
       <collision name="collision">
         <geometry>
-          <plane>
-            <normal>0 0 1</normal>
-            <size>200 200</size>
-          </plane>
+          <plane><normal>0 0 1</normal><size>200 200</size></plane>
         </geometry>
         <surface>
-          <friction>
-            <ode>
-              <mu>1.0</mu>
-              <mu2>1.0</mu2>
-            </ode>
-          </friction>
+          <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
           <contact><ode/></contact>
         </surface>
       </collision>
       <visual name="visual">
         <cast_shadows>false</cast_shadows>
         <geometry>
-          <plane>
-            <normal>0 0 1</normal>
-            <size>200 200</size>
-          </plane>
+          <plane><normal>0 0 1</normal><size>200 200</size></plane>
         </geometry>
         <material>
-          <!-- Light grey floor — provides enough texture for RTAB-Map visual SLAM -->
           <ambient>0.75 0.75 0.75 1</ambient>
           <diffuse>0.75 0.75 0.75 1</diffuse>
           <specular>0.05 0.05 0.05 1</specular>
@@ -249,383 +225,189 @@
   </model>
 
   <!-- ══════════════════════════════════════════════════════════════════
-       PERIMETER WALLS (4 sides)
-       Arena: 20 m wide (X: -10 to +10), 16 m deep (Y: -8 to +8)
-       Wall thickness: 0.3 m, height: 2.5 m (above camera at 0.63m)
+       PERIMETER WALLS — Arena: 20m (X: -10..+10) × 16m (Y: -8..+8)
        ══════════════════════════════════════════════════════════════════ -->
-
-  <!-- South wall (behind robot start position) -->
   <model name="wall_south">
-    <static>true</static>
-    <pose>0 -8 1.25 0 0 0</pose>
+    <static>true</static><pose>0 -8 1.25 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>20.6 0.3 2.5</size></box></geometry>
+        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>20.6 0.3 2.5</size></box></geometry></collision>
     </link>
   </model>
-
-  <!-- North wall (goal side) -->
   <model name="wall_north">
-    <static>true</static>
-    <pose>0 8 1.25 0 0 0</pose>
+    <static>true</static><pose>0 8 1.25 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>20.6 0.3 2.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>20.6 0.3 2.5</size></box></geometry>
+        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>20.6 0.3 2.5</size></box></geometry></collision>
     </link>
   </model>
-
-  <!-- West wall -->
   <model name="wall_west">
-    <static>true</static>
-    <pose>-10 0 1.25 0 0 0</pose>
+    <static>true</static><pose>-10 0 1.25 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>0.3 16.6 2.5</size></box></geometry>
+        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.3 16.6 2.5</size></box></geometry></collision>
     </link>
   </model>
-
-  <!-- East wall -->
   <model name="wall_east">
-    <static>true</static>
-    <pose>10 0 1.25 0 0 0</pose>
+    <static>true</static><pose>10 0 1.25 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>0.3 16.6 2.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>0.3 16.6 2.5</size></box></geometry>
+        <material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.3 16.6 2.5</size></box></geometry></collision>
     </link>
   </model>
 
   <!-- ══════════════════════════════════════════════════════════════════
-       TEST OBSTACLES
-       Purpose: Create a navigation challenge requiring path planning.
-       Objects placed to force the robot to navigate around/through them.
-
-       Row 1 (y = -5):   Box_Start — first obstacle just ahead of spawn
-       Row 2 (y = -3):   Box_L1, Box_R1 — dual gate forcing center entry
-       Row 3 (y = 0):    Cyl_CL, Box_C, Cyl_CR — zigzag section
-       Row 4 (y = +2):   Box_L2, Box_R2 — side corridor guidance
-       Row 5 (y = +5):   Shelf_Wall (partial), Cyl_NW, Cyl_NE — bottleneck
+       TEST OBSTACLES — 5 rows, navigable with Smac2D + RPP
        ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- ── Row 1: First obstacle (y=-5) ──────────────────────────────────
-       A box placed 1.5m ahead of the robot's start position (y=-6.5).
-       Tests immediate obstacle detection + avoidance by depth camera. -->
+  <!-- Row 1 (y=-5): First obstacle just ahead of robot spawn -->
   <model name="obs_box_start">
-    <static>true</static>
-    <pose>2.5 -5.0 0.5 0 0 0</pose>
+    <static>true</static><pose>2.5 -5.0 0.5 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-        <material>
-          <ambient>0.95 0.8 0.1 1</ambient>   <!-- bright yellow -->
-          <diffuse>0.95 0.8 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
+        <material><ambient>0.95 0.8 0.1 1</ambient><diffuse>0.95 0.8 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Row 2: Dual gate (y=-3) ──────────────────────────────────────
-       Two boxes on opposite sides leave a ~5m center gap.
-       Robot starting at center must detect and go through the gap,
-       then is forced to navigate around one of them for return trips. -->
+  <!-- Row 2 (y=-3): Dual gate — forces center navigation -->
   <model name="obs_box_L1">
-    <static>true</static>
-    <pose>-4.0 -3.0 0.5 0 0 0</pose>
+    <static>true</static><pose>-4.0 -3.0 0.5 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-        <material>
-          <ambient>0.95 0.8 0.1 1</ambient>
-          <diffuse>0.95 0.8 0.1 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
+        <material><ambient>0.95 0.8 0.1 1</ambient><diffuse>0.95 0.8 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
     </link>
   </model>
-
   <model name="obs_box_R1">
-    <static>true</static>
-    <pose>4.0 -3.0 0.5 0 0 0</pose>
+    <static>true</static><pose>4.0 -3.0 0.5 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-        <material>
-          <ambient>0.95 0.8 0.1 1</ambient>
-          <diffuse>0.95 0.8 0.1 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.0 1.0 1.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.0 1.0 1.0</size></box></geometry>
+        <material><ambient>0.95 0.8 0.1 1</ambient><diffuse>0.95 0.8 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.0 1.0 1.0</size></box></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Row 3: Zigzag section (y=0) ───────────────────────────────────
-       Center box forces deflection; cylinders on sides constrain choices.
-       Tests costmap updates and replanning. -->
+  <!-- Row 3 (y=0): Zigzag — blue cylinders + red center box -->
   <model name="obs_cyl_CL">
-    <static>true</static>
-    <pose>-3.5 0.0 0.75 0 0 0</pose>
+    <static>true</static><pose>-3.5 0.0 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.1 0.4 0.9 1</ambient>   <!-- blue cylinders -->
-          <diffuse>0.1 0.4 0.9 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-      </collision>
+      <visual name="v"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.1 0.4 0.9 1</ambient><diffuse>0.1 0.4 0.9 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry></collision>
     </link>
   </model>
-
   <model name="obs_box_C">
-    <static>true</static>
-    <pose>0.0 -0.5 0.75 0 0 0</pose>
+    <static>true</static><pose>0.0 -0.5 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.2 1.2 1.5</size></box></geometry>
-        <material>
-          <ambient>0.85 0.15 0.15 1</ambient>   <!-- red center obstacle -->
-          <diffuse>0.85 0.15 0.15 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.2 1.2 1.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.2 1.2 1.5</size></box></geometry>
+        <material><ambient>0.85 0.15 0.15 1</ambient><diffuse>0.85 0.15 0.15 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.2 1.2 1.5</size></box></geometry></collision>
     </link>
   </model>
-
   <model name="obs_cyl_CR">
-    <static>true</static>
-    <pose>3.5 0.0 0.75 0 0 0</pose>
+    <static>true</static><pose>3.5 0.0 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.1 0.4 0.9 1</ambient>
-          <diffuse>0.1 0.4 0.9 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
-      </collision>
+      <visual name="v"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.1 0.4 0.9 1</ambient><diffuse>0.1 0.4 0.9 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.4</radius><length>1.5</length></cylinder></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Row 4: Side corridor shapers (y=+2) ────────────────────────────
-       Large boxes near the side walls create corridor-like passages.
-       Robot must stay in the 4m center corridor between them. -->
+  <!-- Row 4 (y=+2): Green side shapers — create center corridor -->
   <model name="obs_box_L2">
-    <static>true</static>
-    <pose>-6.5 2.0 0.5 0 0 0</pose>
+    <static>true</static><pose>-6.5 2.0 0.5 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-        <material>
-          <ambient>0.2 0.7 0.3 1</ambient>   <!-- green boxes -->
-          <diffuse>0.2 0.7 0.3 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.5 2.0 1.0</size></box></geometry>
+        <material><ambient>0.2 0.7 0.3 1</ambient><diffuse>0.2 0.7 0.3 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.5 2.0 1.0</size></box></geometry></collision>
     </link>
   </model>
-
   <model name="obs_box_R2">
-    <static>true</static>
-    <pose>6.5 2.0 0.5 0 0 0</pose>
+    <static>true</static><pose>6.5 2.0 0.5 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-        <material>
-          <ambient>0.2 0.7 0.3 1</ambient>
-          <diffuse>0.2 0.7 0.3 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.5 2.0 1.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.5 2.0 1.0</size></box></geometry>
+        <material><ambient>0.2 0.7 0.3 1</ambient><diffuse>0.2 0.7 0.3 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.5 2.0 1.0</size></box></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Row 5: Bottleneck / final challenge (y=+5) ──────────────────────
-       Partial shelf wall across the center (6m long, 1m gap on each side)
-       forces the planner to use a specific route.
-       Cylinders on sides further constrain the space. -->
+  <!-- Row 5 (y=+5): Shelf wall + orange cylinders — final bottleneck -->
   <model name="obs_shelf_wall">
-    <static>true</static>
-    <pose>0.0 5.2 1.0 0 0 0</pose>
+    <static>true</static><pose>0.0 5.2 1.0 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <!-- 6m wall with 4m gap on each side (total arena = 20m wide) -->
-        <geometry><box><size>6.0 0.3 2.0</size></box></geometry>
-        <material>
-          <ambient>0.5 0.3 0.1 1</ambient>   <!-- brown shelf/wall color -->
-          <diffuse>0.5 0.3 0.1 1</diffuse>
-          <specular>0.1 0.1 0.1 1</specular>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>6.0 0.3 2.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>6.0 0.3 2.0</size></box></geometry>
+        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>6.0 0.3 2.0</size></box></geometry></collision>
     </link>
   </model>
-
   <model name="obs_cyl_NW">
-    <static>true</static>
-    <pose>-4.5 5.0 0.75 0 0 0</pose>
+    <static>true</static><pose>-4.5 5.0 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.9 0.4 0.1 1</ambient>   <!-- orange cylinders -->
-          <diffuse>0.9 0.4 0.1 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-      </collision>
+      <visual name="v"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.9 0.4 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry></collision>
     </link>
   </model>
-
   <model name="obs_cyl_NE">
-    <static>true</static>
-    <pose>4.5 5.0 0.75 0 0 0</pose>
+    <static>true</static><pose>4.5 5.0 0.75 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.9 0.4 0.1 1</ambient>
-          <diffuse>0.9 0.4 0.1 1</diffuse>
-        </material>
-      </visual>
-      <collision name="collision">
-        <geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
-      </collision>
+      <visual name="v"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry>
+        <material><ambient>0.9 0.4 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.45</radius><length>1.5</length></cylinder></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Additional: L-shaped wall section (NE quadrant) ─────────────────
-       Creates an enclosed pocket in the NE corner — tests ability to plan
-       into/out of concave spaces and reject impossible goals.
-       The pocket opening faces WEST (robot can enter from x<7, y>4).  -->
+  <!-- L-shaped wall pocket in NE corner — tests concave space planning -->
   <model name="obs_L_arm1">
-    <static>true</static>
-    <!-- Vertical segment (runs N-S, 4m long) -->
-    <pose>7.5 4.5 1.0 0 0 0</pose>
+    <static>true</static><pose>7.5 4.5 1.0 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>0.3 4.0 2.0</size></box></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>0.3 4.0 2.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>0.3 4.0 2.0</size></box></geometry>
+        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.3 4.0 2.0</size></box></geometry></collision>
     </link>
   </model>
-
   <model name="obs_L_arm2">
-    <static>true</static>
-    <!-- Horizontal segment (runs E-W, 3m long, at y=2.5) -->
-    <pose>6.1 2.6 1.0 0 0 0</pose>
+    <static>true</static><pose>6.1 2.6 1.0 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>3.0 0.3 2.0</size></box></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>3.0 0.3 2.0</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>3.0 0.3 2.0</size></box></geometry>
+        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>3.0 0.3 2.0</size></box></geometry></collision>
     </link>
   </model>
 
-  <!-- ── Small box cluster (SW quadrant): extra SLAM features ──────────────
-       Three small boxes forming an L near the SW corner.
-       Adds visual features for RTAB-Map to improve SLAM in that area. -->
-  <model name="obs_cluster_A">
-    <static>true</static>
-    <pose>-7.0 -1.5 0.4 0 0 0</pose>
+  <!-- Purple cluster in SW — adds visual features for RTAB-Map in that corner -->
+  <model name="obs_cluster_A"><static>true</static><pose>-7.0 -1.5 0.4 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>0.6 0.6 0.8</size></box></geometry>
-        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>0.6 0.6 0.8</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>0.6 0.6 0.8</size></box></geometry>
+        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.6 0.6 0.8</size></box></geometry></collision>
     </link>
   </model>
-
-  <model name="obs_cluster_B">
-    <static>true</static>
-    <pose>-7.0 -2.5 0.3 0 0 0</pose>
+  <model name="obs_cluster_B"><static>true</static><pose>-7.0 -2.5 0.3 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>0.6 0.6 0.6</size></box></geometry>
-        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>0.6 0.6 0.6</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>0.6 0.6 0.6</size></box></geometry>
+        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.6 0.6 0.6</size></box></geometry></collision>
     </link>
   </model>
-
-  <model name="obs_cluster_C">
-    <static>true</static>
-    <pose>-8.0 -2.0 0.25 0 0 0</pose>
+  <model name="obs_cluster_C"><static>true</static><pose>-8.0 -2.0 0.25 0 0 0</pose>
     <link name="link">
-      <visual name="visual">
-        <geometry><box><size>1.8 0.4 0.5</size></box></geometry>
-        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material>
-      </visual>
-      <collision name="collision">
-        <geometry><box><size>1.8 0.4 0.5</size></box></geometry>
-      </collision>
+      <visual name="v"><geometry><box><size>1.8 0.4 0.5</size></box></geometry>
+        <material><ambient>0.4 0.2 0.6 1</ambient><diffuse>0.4 0.2 0.6 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>1.8 0.4 0.5</size></box></geometry></collision>
     </link>
   </model>
 
   <!-- ══════════════════════════════════════════════════════════════════
-       LOCALBOT ROBOT
-       Zero Fuel dependency — loaded from GZ_SIM_RESOURCE_PATH which is
-       set to install/ugv_sim/share/ugv_sim/models by sim.launch.py.
-       Spawn: center of south zone, facing north (+Y direction, yaw=π/2).
-       z=0.01 gives 1cm clearance above ground (prevents initial physics jitter).
+       NOTE: Localbot robot NOT included here.
+       Robot is spawned dynamically by sim.launch.py using ros_gz_sim create.
+       This makes the world reusable for any robot or spawn configuration.
        ══════════════════════════════════════════════════════════════════ -->
-  <include>
-    <uri>model://localbot</uri>
-    <name>localbot</name>
-    <!-- (0, -6.5): open south zone, 1.5m from south wall, facing north -->
-    <pose>0 -6.5 0.01 0 0 1.5708</pose>
-  </include>
 
 </world>
 </sdf>
