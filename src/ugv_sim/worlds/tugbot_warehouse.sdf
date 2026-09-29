@@ -146,7 +146,7 @@
               <property key="height" type="double">900</property>
               <property key="state" type="string">docked</property>
           </ignition-gui>
-          <topic>/model/tugbot/cmd_vel</topic>
+          <topic>/model/localbot/cmd_vel</topic>
       </plugin>
     </gui>
 
@@ -199,22 +199,16 @@
       <pose>14.7 -10.6 -0.04 0 0 0</pose>
     </include>
 
-    <!-- Tugbot loaded from local model directory (not Fuel URL).
-         model://tugbot resolves via GZ_SIM_RESOURCE_PATH set in sim.launch.py,
-         which puts the ugv_sim install models directory first. This ensures all
-         local model.sdf modifications are applied (fixed light joint, etc.).
-         NEVER change back to the Fuel URL — it bypasses all local fixes. -->
+    <!-- Localbot: project-native robot (no Fuel/internet dependency).
+         Resolved via GZ_SIM_RESOURCE_PATH → install/ugv_sim/share/ugv_sim/models/localbot/
+         NEVER use a fuel.ignitionrobotics.org URL here — it bypasses local model changes.
+         Spawn position: validated open aisle (11.5, -10.6) facing -X direction (yaw=π). -->
     <include>
-      <uri>model://tugbot</uri>
-      <name>tugbot</name>
-      <!-- Spawn at a validated open aisle in the warehouse.
-           (0,0) embedded the robot inside the Warehouse building's collision structure
-           (Warehouse model is at world origin), physically trapping it.
-           (11.5, -10.6, yaw=π) is the original MovAI-validated aisle position.
-           odom frame always resets relative to where the robot starts,
-           so navigation goals in odom space work correctly regardless of world coords. -->
-      <pose>11.5 -10.6 0.1 0 0 3.14159</pose>
+      <uri>model://localbot</uri>
+      <name>localbot</name>
+      <pose>11.5 -10.6 0.01 0 0 3.14159</pose>
     </include>
+
 
     <!-- Carts -->
 

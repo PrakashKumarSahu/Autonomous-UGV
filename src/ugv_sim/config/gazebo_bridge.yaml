@@ -1,69 +1,107 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# gazebo_bridge.yaml — ROS ↔ Gazebo Harmonic topic bridge configuration
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Used by: ros_gz_bridge (parameter_bridge) launched from sim.launch.py
+#
+# QoS rules:
+#   ALL GZ→ROS bridges default to BestEffort (Gazebo sensor convention).
+#   Nodes that need Reliable data use relay nodes (depth_relay_node, joint_state_relay)
+#   to re-publish with Reliable QoS. Do NOT set Reliable here — it causes
+#   dropped messages because the GZ bridge publishes BestEffort internally.
+#
+# Topic naming convention (Gazebo Harmonic):
+#   Sensors  : /world/<world_name>/model/<model>/link/<link>/sensor/<sensor>/<type>
+#   DiffDrive: /model/<model>/odometry  /model/<model>/tf  /model/<model>/cmd_vel
+#   JointState: /world/<world_name>/model/<model>/joint_state
+#
+# Model: "localbot" (project-native robot, replaces Fuel TugBot dependency)
+# World: "world_demo" (name defined inside tugbot_warehouse.sdf <world name="world_demo">)
+#
+# ── CRITICAL: Depth camera topic suffix ──────────────────────────────────────
+# Gazebo Harmonic depth_camera sensors publish on "depth_image" NOT "image".
+# Verified with: gz topic -l | grep depth
+# Using "image" silently creates a ghost topic — bridge connects but zero bytes arrive.
+# RTAB-Map never gets depth data → SLAM never builds a map.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── RGB Camera ───────────────────────────────────────────────────────────────
 - ros_topic_name: "/camera/image_raw"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/color/image"
+  gz_topic_name: "/world/world_demo/model/localbot/link/camera_link/sensor/color/image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
 
 - ros_topic_name: "/camera/camera_info"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/color/camera_info"
+  gz_topic_name: "/world/world_demo/model/localbot/link/camera_link/sensor/color/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-# ── Real Depth Camera (metric, 32FC1, 0.1-10 m) ──────────────────────────────
-# The Tugbot SDF has a native depth_camera sensor. This is the ground-truth
-# depth for simulation. depth_relay_node re-publishes this on
-# /perception/depth/image_raw with frame_id=camera_link_optical.
-#
-# IMPORTANT: Gazebo Harmonic depth_camera sensors publish on 'depth_image' topic
-# (not 'image'). Verified with: gz topic -l | grep depth
-# Actual GZ topics: .../sensor/depth/depth_image  and .../sensor/depth/camera_info
+# ── Depth Camera (32FC1, metric, 0.3–10 m) ────────────────────────────────
+# CRITICAL: topic suffix is "depth_image" not "image" — do NOT change.
+# depth_relay_node re-publishes on /perception/depth/image_raw (Reliable QoS).
 - ros_topic_name: "/camera/depth/image_raw"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/depth_image"
+  gz_topic_name: "/world/world_demo/model/localbot/link/camera_link/sensor/depth/depth_image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
 
 - ros_topic_name: "/camera/depth/camera_info"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/camera_front/sensor/depth/camera_info"
+  gz_topic_name: "/world/world_demo/model/localbot/link/camera_link/sensor/depth/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-
-
+# ── IMU ──────────────────────────────────────────────────────────────────────
 - ros_topic_name: "/imu/data"
-  gz_topic_name: "/world/world_demo/model/tugbot/link/imu_link/sensor/imu/imu"
+  gz_topic_name: "/world/world_demo/model/localbot/link/imu_link/sensor/imu/imu"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS
 
+# ── Odometry (DiffDrive) ─────────────────────────────────────────────────────
+# DiffDrive publishes physics-based odometry at 20 Hz.
+# Bridged to /odometry/filtered so RTAB-Map and Nav2 controller can use it.
 - ros_topic_name: "/odometry/filtered"
-  gz_topic_name: "/model/tugbot/odometry"
+  gz_topic_name: "/model/localbot/odometry"
   ros_type_name: "nav_msgs/msg/Odometry"
   gz_type_name: "gz.msgs.Odometry"
   direction: GZ_TO_ROS
 
+# ── TF (odom → base_footprint) ───────────────────────────────────────────────
+# DiffDrive publishes the odom→base_footprint transform at 20 Hz.
+# This is the primary TF link from odometry to the robot base frame.
 - ros_topic_name: "/tf"
-  gz_topic_name: "/model/tugbot/tf"
+  gz_topic_name: "/model/localbot/tf"
   ros_type_name: "tf2_msgs/msg/TFMessage"
   gz_type_name: "gz.msgs.Pose_V"
   direction: GZ_TO_ROS
 
+# ── Command Velocity (Nav2 → Gazebo) ─────────────────────────────────────────
+# Nav2 controller publishes /cmd_vel (Twist) → bridge forwards to Gazebo DiffDrive.
 - ros_topic_name: "/cmd_vel"
-  gz_topic_name: "/model/tugbot/cmd_vel"
+  gz_topic_name: "/model/localbot/cmd_vel"
   ros_type_name: "geometry_msgs/msg/Twist"
   gz_type_name: "gz.msgs.Twist"
   direction: ROS_TO_GZ
 
+# ── Simulation Clock ──────────────────────────────────────────────────────────
+# /clock is used by all nodes with use_sim_time: true for time synchronisation.
 - ros_topic_name: "/clock"
   gz_topic_name: "/world/world_demo/clock"
   ros_type_name: "rosgraph_msgs/msg/Clock"
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
 
+# ── Joint States ─────────────────────────────────────────────────────────────
+# Localbot's JointStatePublisher publishes ONLY wheel joints with URDF-matching names:
+#   left_wheel_joint, right_wheel_joint
+# (No gripper/light joints — those don't exist on Localbot.)
+# joint_state_relay.py does QoS bridging only (BestEffort→Reliable).
+# No name remapping needed (Localbot joint names already match URDF).
 - ros_topic_name: "/joint_states"
-  gz_topic_name: "/world/world_demo/model/tugbot/joint_state"
+  gz_topic_name: "/world/world_demo/model/localbot/joint_state"
   ros_type_name: "sensor_msgs/msg/JointState"
   gz_type_name: "gz.msgs.Model"
   direction: GZ_TO_ROS

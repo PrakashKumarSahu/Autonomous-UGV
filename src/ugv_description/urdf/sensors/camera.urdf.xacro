@@ -1,10 +1,32 @@
 <?xml version="1.0"?>
+<!--
+  camera.urdf.xacro — Camera link and optical frame definitions for Localbot.
+
+  Defines three links and their joints:
+    camera_link         : Physical camera housing (box geometry)
+    camera_link_optical : Standard ROS optical frame (Z-forward, X-right, Y-down)
+
+  The camera_link_optical frame is what Gazebo sensors publish image data in.
+  This must match the optical_frame_id set in Localbot's model.sdf sensor config.
+
+  Camera position (base_camera_joint) matches Localbot model.sdf camera_link pose:
+    camera_link in model frame = 0.0553 0 0.6323
+    = base_link(0 0 0.2) + base_camera_joint(0.0553 0 0.4323)
+
+  NOTE: The "tugbot/camera_front/color" alias link has been REMOVED.
+  The TugBot Fuel model published camera_info with frame_id "tugbot/camera_front/color",
+  requiring an alias TF link. Localbot's sensors use optical_frame_id="camera_link_optical"
+  directly, so no alias is needed. The TF tree is simpler and fully standard.
+-->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:property name="camera_length" value="0.03" />
-    <xacro:property name="camera_width" value="0.10" />
-    <xacro:property name="camera_height" value="0.03" />
+    <!-- Camera housing dimensions -->
+    <xacro:property name="camera_length" value="0.03" />   <!-- depth (X) -->
+    <xacro:property name="camera_width"  value="0.10" />   <!-- width (Y) -->
+    <xacro:property name="camera_height" value="0.03" />   <!-- height (Z) -->
 
+    <!-- camera_link: physical camera housing mounted on Localbot's camera mast.
+         Visualized as a small dark-grey box in RViz. -->
     <link name="camera_link">
         <visual>
             <geometry>
@@ -26,14 +48,30 @@
         </inertial>
     </link>
 
-    <!-- Tugbot camera_front link matching Gazebo SDF pose (0.0553, 0, 0.4323) -->
+    <!-- base_camera_joint: mount camera_link onto base_link at Localbot mast top.
+         Position matches Localbot model.sdf camera_link pose relative to base_link:
+           xyz = 0.0553 0 0.4323
+         (In model frame: 0.0553 0 0.2+0.4323=0.6323 — camera is 63cm from ground)
+         This joint is FIXED — camera does not move relative to chassis. -->
     <joint name="base_camera_joint" type="fixed">
         <parent link="base_link" />
         <child link="camera_link" />
         <origin xyz="0.0553 0 0.4323" rpy="0 0 0" />
     </joint>
 
-    <!-- Standard ROS optical frame convention -->
+    <!-- camera_link_optical: standard ROS camera optical frame.
+         Convention: Z-forward (into scene), X-right, Y-down.
+         This is the frame_id used for:
+           - /camera/image_raw     header.frame_id
+           - /camera/camera_info   header.frame_id
+           - /camera/depth/*       header.frame_id
+           - /perception/depth/*   header.frame_id (relayed)
+           - Nav2 ObstacleLayer    sensor_frame (inferred from point cloud)
+         Rotation rpy="-pi/2 0 -pi/2" converts from camera body frame to optical frame:
+           camera body: X-forward, Y-left, Z-up
+           optical:     X-right,   Y-down, Z-forward
+         Offset xyz="0 0.0325 0.0125" matches the color module position in Localbot SDF
+         (sensor pose <0 0.0325 0.0125> relative to camera_link). -->
     <link name="camera_link_optical" />
 
     <joint name="camera_optical_joint" type="fixed">
@@ -41,41 +79,5 @@
         <parent link="camera_link" />
         <child link="camera_link_optical" />
     </joint>
-
-    <!-- Alias for Gazebo Tugbot frame_id: tugbot/camera_front/color -->
-    <link name="tugbot/camera_front/color" />
-    <joint name="tugbot_camera_color_joint" type="fixed">
-        <origin xyz="0 0 0" rpy="0 0 0" />
-        <parent link="camera_link_optical" />
-        <child link="tugbot/camera_front/color" />
-    </joint>
-
-    <gazebo reference="camera_link">
-        <sensor name="camera" type="camera">
-            <camera>
-                <horizontal_fov>1.3962634</horizontal_fov>
-                <image>
-                    <width>640</width>
-                    <height>480</height>
-                    <format>R8G8B8</format>
-                </image>
-                <clip>
-                    <near>0.1</near>
-                    <far>25.0</far>
-                </clip>
-                <noise>
-                    <type>gaussian</type>
-                    <mean>0.0</mean>
-                    <stddev>0.005</stddev>
-                </noise>
-                <optical_frame_id>camera_link_optical</optical_frame_id>
-                <camera_info_topic>camera/camera_info</camera_info_topic>
-            </camera>
-            <always_on>1</always_on>
-            <update_rate>30</update_rate>
-            <visualize>true</visualize>
-            <topic>camera/image_raw</topic>
-        </sensor>
-    </gazebo>
 
 </robot>

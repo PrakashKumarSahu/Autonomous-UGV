@@ -1,23 +1,37 @@
 #!/usr/bin/env python3
 """
-Joint State Relay Node for UGV Simulation.
+Joint State Relay Node — QoS bridge for Localbot simulation.
 
-The Gazebo Tugbot SDF model (from Fuel) publishes joint states with names:
-  - wheel_left_joint
-  - wheel_right_joint
-  - gripper_joint
-  - gripper_hand_joint
+PURPOSE
+───────
+Gazebo bridge publishes /joint_states with BestEffort QoS.
+robot_state_publisher subscribes with Reliable QoS.
+These two QoS policies are INCOMPATIBLE in DDS — the subscriber receives nothing.
 
-But the UGV URDF (ugv_base.urdf.xacro) defines joints as:
-  - left_wheel_joint
-  - right_wheel_joint
+This node bridges the QoS mismatch:
+  Subscribes:  /joint_states  (BestEffort — matches ros_gz_bridge)
+  Publishes:   /joint_states_urdf  (Reliable — matches robot_state_publisher)
 
-This mismatch means robot_state_publisher never receives states for
-left_wheel_joint / right_wheel_joint, so it cannot publish TF for the
-wheel links, causing RViz "No transform" errors.
+LOCALBOT: NO NAME REMAPPING NEEDED
+───────────────────────────────────
+Localbot's JointStatePublisher is configured with URDF-matching joint names:
+  left_wheel_joint   (Localbot SDF)  →  left_wheel_joint   (URDF)   ✓ match
+  right_wheel_joint  (Localbot SDF)  →  right_wheel_joint  (URDF)   ✓ match
 
-This node subscribes to /joint_states (from the Gazebo bridge) and
-republishes with corrected joint names that match the URDF.
+The TugBot had reversed names (wheel_left_joint vs left_wheel_joint), requiring
+name remapping here. Localbot eliminates that mismatch entirely.
+
+The filter still exists for safety: if any unexpected joint names appear
+(e.g., due to future model changes), they are silently dropped instead of
+causing robot_state_publisher "unknown joint" warnings at 50 Hz.
+Unknown joint warnings cause repeated TF updates → RViz robot model flickers white.
+
+URDF JOINTS THAT RECEIVE JOINT STATES
+──────────────────────────────────────
+Only revolute/continuous joints need runtime state: left_wheel_joint, right_wheel_joint.
+Fixed joints (base_joint, base_camera_joint, base_imu_joint, etc.) are published
+as static TF by robot_state_publisher without needing joint state values.
+Caster joints (ball type in SDF) map to fixed joints in URDF — no state needed.
 """
 
 import rclpy
@@ -26,25 +40,27 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from sensor_msgs.msg import JointState
 
 
-# Mapping: SDF joint name (from Gazebo/Fuel model) -> URDF joint name.
-# ONLY joints listed here are forwarded to robot_state_publisher.
-# All other joints (gripper_joint, gripper_hand_joint, warnign_light_joint, etc.)
-# are silently dropped — RSP has no URDF entries for them and would log repeated
-# "unknown joint" errors at ~50 Hz, causing RViz flickering (robot blinks white).
-SDF_TO_URDF_JOINT_MAP = {
-    'wheel_left_joint':  'left_wheel_joint',
-    'wheel_right_joint': 'right_wheel_joint',
-}
-
-# Set of URDF-known output names (used for fast O(1) lookup)
-URDF_KNOWN_JOINTS = set(SDF_TO_URDF_JOINT_MAP.values())
+# Set of joint names that exist in the URDF as movable joints.
+# Only joints in this set are forwarded to robot_state_publisher.
+# All other joint names are silently dropped (future-proofing).
+URDF_WHEEL_JOINTS = frozenset({
+    'left_wheel_joint',
+    'right_wheel_joint',
+})
 
 
 class JointStateRelayNode(Node):
+    """
+    QoS bridge: /joint_states (BestEffort) → /joint_states_urdf (Reliable).
+
+    With Localbot, this node is a pure pass-through for the two wheel joints.
+    Name remapping is not needed (Localbot joint names match URDF exactly).
+    """
+
     def __init__(self):
         super().__init__('joint_state_relay')
 
-        # Best Effort to match ros_gz_bridge sensor output
+        # BestEffort matches ros_gz_bridge default QoS for sensor topics.
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -52,7 +68,7 @@ class JointStateRelayNode(Node):
             durability=DurabilityPolicy.VOLATILE
         )
 
-        # Reliable QoS for robot_state_publisher (standard ROS convention)
+        # Reliable QoS matches robot_state_publisher's subscription.
         reliable_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -63,7 +79,7 @@ class JointStateRelayNode(Node):
         self.sub = self.create_subscription(
             JointState,
             '/joint_states',
-            self.joint_state_callback,
+            self._callback,
             sensor_qos
         )
 
@@ -74,24 +90,24 @@ class JointStateRelayNode(Node):
         )
 
         self.get_logger().info(
-            'Joint State Relay active: mapping SDF names → URDF names\n'
-            '  wheel_left_joint  → left_wheel_joint\n'
-            '  wheel_right_joint → right_wheel_joint'
+            'Joint State Relay active.\n'
+            '  QoS bridge: /joint_states (BestEffort) → /joint_states_urdf (Reliable)\n'
+            '  Pass-through joints: left_wheel_joint, right_wheel_joint\n'
+            '  (Localbot joint names already match URDF — no name remapping needed)'
         )
 
-    def joint_state_callback(self, msg: JointState):
+    def _callback(self, msg: JointState) -> None:
+        """Forward wheel joints only, drop any unexpected joint names."""
         out = JointState()
         out.header = msg.header
 
         for i, name in enumerate(msg.name):
-            urdf_name = SDF_TO_URDF_JOINT_MAP.get(name, None)
-            # Drop joints that have no mapping to a URDF joint.
-            # Gazebo publishes gripper_joint, gripper_hand_joint, warnign_light_joint,
-            # etc. — none of these exist in ugv_base.urdf.xacro. Passing them to RSP
-            # causes "unknown joint" warnings at 50 Hz → RViz robot blinks white.
-            if urdf_name is None:
+            if name not in URDF_WHEEL_JOINTS:
+                # Drop joints unknown to the URDF (e.g., future model additions).
+                # Passing unknown joints to RSP causes "unknown joint" warnings at
+                # ~50 Hz, which invalidates TF and makes RViz flicker white.
                 continue
-            out.name.append(urdf_name)
+            out.name.append(name)
             if i < len(msg.position):
                 out.position.append(msg.position[i])
             if i < len(msg.velocity):
@@ -99,7 +115,6 @@ class JointStateRelayNode(Node):
             if i < len(msg.effort):
                 out.effort.append(msg.effort[i])
 
-        # Only publish if we have at least one valid wheel joint
         if out.name:
             self.pub.publish(out)
 

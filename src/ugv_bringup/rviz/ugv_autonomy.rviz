@@ -10,25 +10,33 @@ Panels:
         - /CameraDepthCloud1
         - /RGBCamera1
       Splitter Ratio: 0.5
-    Tree Height: 800
+    Tree Height: 197
 Visualization Manager:
   Class: ""
   Displays:
-    # ── World Frame ────────────────────────────────────────────────────────────
     - Alpha: 0.5
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
       Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
       Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
       Plane: XY
       Plane Cell Count: 30
       Reference Frame: <Fixed Frame>
       Value: true
-
-    # ── Robot Model ────────────────────────────────────────────────────────────
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
       Description Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -36,28 +44,86 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /robot_description
       Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_footprint:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        camera_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        camera_link_optical:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        front_caster_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        imu_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        rear_caster_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        tugbot/camera_front/color:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+      Mass Properties:
+        Inertia: false
+        Mass: false
       Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
       Visual Enabled: true
-
-    # ── TF (disabled by default, enable for debugging) ─────────────────────────
     - Class: rviz_default_plugins/TF
       Enabled: false
+      Filter (blacklist): ""
+      Filter (whitelist): ""
       Frame Timeout: 15
       Frames:
         All Enabled: true
-      Marker Scale: 0.3
+      Marker Scale: 0.30000001192092896
       Name: TF
       Show Arrows: false
       Show Axes: true
       Show Names: false
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # NAVIGATION MAPS
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # SLAM occupancy map — built from real depth camera as robot explores.
-    # Uses Transient Local QoS so late-joining RViz always gets latest map.
-    - Alpha: 0.7
+      Tree:
+        {}
+      Update Interval: 0
+      Value: false
+    - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
       Class: rviz_default_plugins/Map
       Color Scheme: map
       Draw Behind: false
@@ -66,13 +132,21 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Transient Local
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_updates
+      Use Timestamp: false
       Value: true
-
-    # Local costmap — camera point cloud marks obstacles in real-time
-    - Alpha: 0.7
+    - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
@@ -81,13 +155,21 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /local_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap_updates
+      Use Timestamp: false
       Value: true
-
-    # Global costmap — RTAB-Map /map projected into Nav2 global frame
-    - Alpha: 0.3
+    - Alpha: 0.30000001192092896
+      Binary representation: false
+      Binary threshold: 100
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
@@ -96,18 +178,18 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /global_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap_updates
+      Use Timestamp: false
       Value: true
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # POINT CLOUDS
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # Camera depth point cloud — what Nav2 uses for real-time obstacle avoidance
-    # In sim mode: from Gazebo real depth sensor (metric ground-truth)
-    # In hw mode:  from RealSense/ZED/Depth Anything (swappable)
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -115,14 +197,22 @@ Visualization Manager:
         Min Value: 0
         Value: true
       Axis: Z
+      Channel Name: intensity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 120; 30
       Color Transformer: FlatColor
-      Decay Time: 0.3
+      Decay Time: 0.30000001192092896
       Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
       Name: CameraDepthCloud
-      Position Transformer: XYZ
-      Size (m): 0.04
+      Position Transformer: ""
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.03999999910593033
       Style: Flat Squares
       Topic:
         Depth: 5
@@ -130,10 +220,10 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /perception/depth/points
+      Use Fixed Frame: true
+      Use rainbow: true
       Value: true
-
-    # RTAB-Map 3D accumulated cloud — the map being built from real depth
-    - Alpha: 0.8
+    - Alpha: 0.800000011920929
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -142,12 +232,20 @@ Visualization Manager:
       Axis: Z
       Channel Name: rgb
       Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
       Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
       Name: RTABMapCloud
       Position Transformer: XYZ
-      Size (m): 0.03
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.029999999329447746
       Style: Flat Squares
       Topic:
         Depth: 5
@@ -155,54 +253,76 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /rtabmap/cloud_map
+      Use Fixed Frame: true
+      Use rainbow: true
       Value: true
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # NAVIGATION PATHS
-    # ─────────────────────────────────────────────────────────────────────────
-
-    - Class: rviz_default_plugins/Path
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
       Color: 0; 255; 0
       Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
       Line Style: Lines
-      Line Width: 0.05
+      Line Width: 0.05000000074505806
       Name: GlobalPlan
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /plan
       Value: true
-
-    - Class: rviz_default_plugins/Odometry
-      Angle Tolerance: 0.1
-      Color: 255; 255; 0
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
       Enabled: true
       Keep: 200
-      Length: 0.3
       Name: OdometryTrail
-      Position Tolerance: 0.1
+      Position Tolerance: 0.10000000149011612
+      Shape:
+        Alpha: 1
+        Axes Length: 1
+        Axes Radius: 0.10000000149011612
+        Color: 255; 25; 0
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Arrow
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /odometry/filtered
       Value: true
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # CAMERA FEEDS
-    # IMPORTANT QoS notes:
-    #   - /camera/image_raw and /camera/depth/image_raw come from Gazebo bridge
-    #     → MUST use Best Effort (Gazebo bridge publishes fire-and-forget)
-    #   - /perception/depth/image_raw comes from depth_relay_node → Reliable
-    #   - /perception/yolo/overlay comes from yolo_seg_node → Reliable
-    #   - /perception/depth_ai/image_raw comes from depth_node → Reliable
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # RGB camera from Gazebo (or real camera in hw mode)
-    # BEST_EFFORT — Gazebo bridge publishes BestEffort, Reliable sub = no data
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -217,10 +337,6 @@ Visualization Manager:
         Reliability Policy: Best Effort
         Value: /camera/image_raw
       Value: true
-
-    # Real depth from Gazebo sensor relayed by depth_relay_node (32FC1, 0.1–10 m)
-    # Min 0 / Max 10 shows full depth range; Normalize Range maps 0m=black, 10m=white
-    # RELIABLE — depth_relay_node re-publishes as Reliable (QoS bridge from BestEffort Gz)
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 10
@@ -235,9 +351,6 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /perception/depth/image_raw
       Value: true
-
-    # YOLO segmentation overlay — hazard detection visualization
-    # RELIABLE — yolo_seg_node publishes Reliable (CPU/GPU node, not Gazebo bridge)
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
@@ -252,10 +365,6 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /perception/yolo/overlay
       Value: true
-
-    # AI Depth visualization (only visible when enable_depth_viz:=true)
-    # Shows Depth Anything V3 estimate — compare with RealDepth above
-    # RELIABLE — depth_node (Depth Anything V3) publishes Reliable
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 10
@@ -270,7 +379,6 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /perception/depth_ai/image_raw
       Value: true
-
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -292,16 +400,41 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 12.0
+      Distance: 12
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
       Focal Point:
-        X: 0.0
-        Y: 0.0
-        Z: 0.0
-      Focal Shape Size: 0.05
-      Focal Shape Type: Sphere
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
       Name: Current View
-      Near Clip Distance: 0.01
+      Near Clip Distance: 0.009999999776482582
       Pitch: 0.75
       Target Frame: base_footprint
       Value: Orbit (rviz)
-      Yaw: 3.14
+      Yaw: 3.140000104904175
+    Saved: ~
+Window Geometry:
+  AIDepth (Depth Anything V3 — enable_depth_viz:=true):
+    collapsed: false
+  Displays:
+    collapsed: false
+  Height: 720
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd0000000100000000000001ad00000272fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d00740072007500650029010000003f000000430000001700fffffffb000000220059004f004c004f00480061007a006100720064004f007600650072006c006100790100000088000000400000001700fffffffb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000ce000000430000001700fffffffb0000001200520047004200430061006d0065007200610100000117000000410000001700fffffffb000000100044006900730070006c006100790073010000015e00000153000000cc00ffffff000001600000027200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  RGBCamera:
+    collapsed: false
+  RealDepth (Gazebo sensor / hw relay):
+    collapsed: false
+  Width: 787
+  X: 216
+  Y: 182
+  YOLOHazardOverlay:
+    collapsed: false
