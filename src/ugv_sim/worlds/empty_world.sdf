@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='ASCII'?>
+<?xml version='1.0' encoding='UTF-8'?>
 <!--
   empty_world.sdf — Minimal Gazebo world for custom testing
   ═══════════════════════════════════════════════════════════════════════════
@@ -156,14 +156,12 @@
   </model>
 
   <!--
-  ═══════════════════════════════════════════════════════════════════════
   ADD YOUR OBSTACLES HERE
-  ═══════════════════════════════════════════════════════════════════════
-  Copy-paste this template for each obstacle:
+  Copy-paste this template for each obstacle (XML: Z = half of object height):
 
   <model name="my_box">
     <static>true</static>
-    <pose>X Y Z 0 0 0</pose>        <!-- X=East, Y=North, Z=Up (centre) -->
+    <pose>X Y Z 0 0 0</pose>
     <link name="link">
       <visual name="v">
         <geometry><box><size>W D H</size></box></geometry>
@@ -175,7 +173,7 @@
     </link>
   </model>
 
-  For cylinders:
+  For cylinders (radius R, height H):
   <model name="my_cylinder">
     <static>true</static>
     <pose>X Y Z 0 0 0</pose>
@@ -189,9 +187,9 @@
     </link>
   </model>
 
-  NOTE: Robot is NOT included here — spawned via sim.launch.py args.
-  ═══════════════════════════════════════════════════════════════════════
+  NOTE: Robot is NOT included here - spawned via sim.launch.py spawn args.
   -->
+
 
 </world>
 </sdf>
