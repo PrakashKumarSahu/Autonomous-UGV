@@ -12,9 +12,9 @@ rgbd_sync → RTAB-Map, Nav2 ObstacleLayer) only reads from:
 ADDITIONAL — colorized depth for clean RViz visualization:
 
   /perception/depth/colorized   (bgr8, TURBO colormap 0–10m, black=invalid/NaN)
-    • Near objects  (0–3 m)  → warm red/orange
-    • Mid-range     (3–7 m)  → yellow/green
-    • Far objects   (7–10 m) → cool blue/purple
+    • Near objects  (0–3 m)  → dark blue / indigo
+    • Mid-range     (3–7 m)  → cyan / green / yellow
+    • Far objects   (7–10 m) → orange / red
     • Invalid/NaN            → black (not treated as real depth)
 
   This eliminates the "black image" problem in RViz. The raw 32FC1 image makes
@@ -24,7 +24,7 @@ ADDITIONAL — colorized depth for clean RViz visualization:
   colormap so depth differences are immediately visible.
 
 Swappable in production — replace this node with:
-  camera_type:=monocular   → depth_node        (Depth Anything V3, any RGB camera)
+  camera_type:=monocular   → depth_node        (Depth Anything V2 Metric Indoor, any RGB camera)
   camera_type:=realsense   → realsense_relay_node (Intel RealSense D435/D455)
   camera_type:=zed         → zed_relay_node    (ZED 2 / ZED X)
 All produce the same output topics — the rest of the stack is unchanged.

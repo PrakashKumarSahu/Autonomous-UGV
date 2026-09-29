@@ -177,7 +177,7 @@ def launch_setup(context, *args, **kwargs):
         executable='joint_state_relay.py',
         name='joint_state_relay',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time == 'true'}]
+        parameters=[{'use_sim_time': use_sim_time.lower() in ('true', '1')}]
     )
 
     return [

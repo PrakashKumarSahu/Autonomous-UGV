@@ -17,7 +17,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
-from sensor_msgs.msg import PointCloud2, Image
+from sensor_msgs.msg import PointCloud2, Image, CameraInfo
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from geometry_msgs.msg import Pose, Point, Quaternion
 import sensor_msgs_py.point_cloud2 as pc2
@@ -96,11 +96,9 @@ class TerrainAnalysisNode(Node):
         # Subscribe to camera_info to get real intrinsics (fx,fy,cx,cy) dynamically.
         # Fixes: was hardcoded to fx=616.0 which is wrong for Gazebo depth cam (fx≈421).
         # Uses Reliable QoS since depth_relay_node publishes camera_info as Reliable.
-        from sensor_msgs.msg import CameraInfo as CameraInfoMsg
-        from rclpy.qos import QoSProfile as _QoS, ReliabilityPolicy as _Rel, HistoryPolicy as _HP
-        reliable_qos = _QoS(reliability=_Rel.RELIABLE, history=_HP.KEEP_LAST, depth=1)
+        reliable_qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=1)
         self.info_sub = self.create_subscription(
-            CameraInfoMsg,
+            CameraInfo,
             '/perception/depth/camera_info',
             self._camera_info_cb,
             reliable_qos

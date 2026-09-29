@@ -1,828 +1,634 @@
-# Autonomous UGV — Complete System Documentation
+# Autonomous UGV
 
-> **Long-term maintenance reference** — one document for understanding, building, running, debugging, extending, and deploying the entire project.
+A fully visual, camera-only Autonomous Unmanned Ground Vehicle built on **ROS 2 Jazzy** and **Gazebo Harmonic**. The robot uses a single RGB-D camera for all perception: real-time depth sensing, YOLO-based hazard detection, visual SLAM, and reactive navigation via Nav2.
+
+> **No LiDAR. No GPS. Pure vision.**
 
 ---
 
 ## Table of Contents
 
-**Quick Reference**
-1. [Build & Launch](#1-build--launch)
-2. [All Launch Arguments](#2-all-launch-arguments)
-3. [Common Recipes](#3-common-recipes)
-4. [Send Navigation Goals](#4-send-navigation-goals)
-
-**Architecture**
-5. [Module Overview](#5-module-overview)
-6. [Data Flow Diagram](#6-data-flow-diagram)
-7. [TF Frame Tree](#7-tf-frame-tree)
-8. [Topic Reference](#8-topic-reference)
-
-**Module Documentation** *(each module is independently maintainable)*
-9. [Simulation (ugv\_sim)](#9-simulation-ugv_sim)
-10. [Robot Description (ugv\_description)](#10-robot-description-ugv_description)
-11. [Perception (ugv\_perception)](#11-perception-ugv_perception)
-12. [SLAM (localization.launch.py)](#12-slam-localizationlaunchpy)
-13. [Navigation (navigation.launch.py)](#13-navigation-navigationlaunchpy)
-14. [Terrain Analysis (ugv\_terrain)](#14-terrain-analysis-ugv_terrain)
-
-**Operations**
-15. [Using a Custom World](#15-using-a-custom-world)
-16. [Depth Source Swapping](#16-depth-source-swapping)
-17. [Configuration Reference](#17-configuration-reference)
-18. [Standalone Module Launch](#18-standalone-module-launch)
-19. [Troubleshooting](#19-troubleshooting)
-20. [Debugging Commands](#20-debugging-commands)
-21. [How to Modify Each Module Safely](#21-how-to-modify-each-module-safely)
-22. [Known Limitations](#22-known-limitations)
-23. [Change History](#23-change-history)
+- [System Overview](#system-overview)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Launch Arguments](#launch-arguments)
+- [Modules](#modules)
+  - [ugv\_sim — Simulation Environment](#ugv_sim--simulation-environment)
+  - [ugv\_description — Robot Model & TF](#ugv_description--robot-model--tf)
+  - [ugv\_perception — AI Perception Stack](#ugv_perception--ai-perception-stack)
+  - [ugv\_terrain — Traversability Mapping](#ugv_terrain--traversability-mapping)
+  - [ugv\_bringup — SLAM, Nav2 & Orchestration](#ugv_bringup--slam-nav2--orchestration)
+  - [ugv\_control — Hardware ros2\_control (Future)](#ugv_control--hardware-ros2_control-future)
+- [Configuration Reference](#configuration-reference)
+- [RViz Dashboard](#rviz-dashboard)
+- [Worlds](#worlds)
+- [Camera / Depth Source Switching](#camera--depth-source-switching)
+- [AI Depth Visualization](#ai-depth-visualization)
+- [Key Topics](#key-topics)
+- [TF Tree](#tf-tree)
+- [Known Limitations](#known-limitations)
+- [Developer Guide](#developer-guide)
 
 ---
 
-## 1. Build & Launch
+## System Overview
+
+The UGV autonomously navigates in unknown indoor/outdoor environments using only a forward-facing RGB-D camera. The full software stack:
+
+1. **Simulation** — Gazebo Harmonic spawns the robot and provides ground-truth sensor data
+2. **Perception** — converts raw sensor data to a canonical `/perception/depth/*` interface
+3. **SLAM** — RTAB-Map builds a live 2D occupancy map from camera data
+4. **Navigation** — Nav2 plans globally on the SLAM map and drives via Regulated Pure Pursuit
+5. **Terrain Analysis** — a rolling traversability grid fuses depth + YOLO hazard masks
+
+Everything launches from a single command:
 
 ```bash
-cd ~/Autonomous-UGV
-source /opt/ros/jazzy/setup.bash
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-source install/setup.bash
-
-# Default: Gazebo + test arena + all modules
 ros2 launch ugv_bringup ugv_complete.launch.py
 ```
 
-**Startup timeline** (Gazebo Harmonic with NVIDIA GPU):
+---
 
-| Time | What becomes ready |
-|------|-------------------|
-| 0–5 s | Physics starts |
-| ~8 s | Localbot spawns (3s delay ensures physics is ready) |
-| ~15 s | Camera/depth topics active, bridge running |
-| ~30 s | RTAB-Map first keyframe → `/map` published |
-| ~45 s | Nav2 lifecycle active, goals accepted |
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    ugv_complete.launch.py                        │
+│  ┌──────────┐  ┌────────────┐  ┌──────────────┐  ┌──────────┐  │
+│  │ ugv_sim  │  │ugv_percep. │  │  ugv_terrain │  │ugv_bringup│  │
+│  │ Gazebo   │  │  AI Stack  │  │ Traversability│  │SLAM+Nav2 │  │
+│  └────┬─────┘  └─────┬──────┘  └──────┬───────┘  └────┬─────┘  │
+│       │              │                │               │         │
+└───────┼──────────────┼────────────────┼───────────────┼─────────┘
+        │              │                │               │
+    /camera/*    /perception/*    /terrain/*      /map, /tf
+    /tf, /odom   /depth/*                         /cmd_vel
+```
+
+### Data Flow
+
+```
+Gazebo
+  ├── /camera/image_raw        (RGB, BestEffort)
+  ├── /camera/depth/image_raw  (32FC1 metres, BestEffort)
+  ├── /camera/camera_info      (BestEffort)
+  ├── /odometry/filtered       (wheel odom, BestEffort)
+  └── /tf  (odom→base_footprint)
+         │
+         ▼
+[depth_relay_node]  (camera_type:=sim)
+  ├── /perception/depth/image_raw   (32FC1, RELIABLE) ──► RTAB-Map, point cloud
+  ├── /perception/depth/camera_info (RELIABLE)        ──► RTAB-Map, terrain
+  └── /perception/depth/colorized   (bgr8 TURBO)      ──► RViz RealDepth panel
+         │
+         ▼
+[depth_to_pointcloud_node]
+  └── /perception/depth/points  (PointCloud2, RELIABLE) ──► Nav2 ObstacleLayer
+         │
+[yolo_seg_node]
+  ├── /perception/hazard_mask   (mono8: 0=safe,128=caution,255=lethal)
+  └── /perception/yolo/overlay  (bgr8 visualization)
+         │
+[terrain_analysis_node]
+  └── /terrain/traversability_grid  (OccupancyGrid)
+         │
+[rtabmap / rgbd_sync]
+  ├── /map  (OccupancyGrid, SLAM map)
+  └── /tf   (map→odom correction)
+         │
+[Nav2 stack]
+  └── /cmd_vel ──► Gazebo DiffDrive
+```
 
 ---
 
-## 2. All Launch Arguments
+## Prerequisites
 
-Run `ros2 launch ugv_bringup ugv_complete.launch.py --show-args` to see the full list.
+| Requirement | Version | Notes |
+|---|---|---|
+| Ubuntu | 24.04 LTS | Required for Gazebo Harmonic |
+| ROS 2 | Jazzy | `ros-jazzy-desktop` |
+| Gazebo | Harmonic | `gz-harmonic` |
+| Python | 3.12 | Ships with Ubuntu 24.04 |
+| NVIDIA GPU | Any CUDA 12+ | Optional; enables YOLO FP16 + DA V2 Metric |
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `mode` | `sim` | `sim` (Gazebo) or `hw` (real robot) |
-| `use_sim_time` | `true` | Use `/clock` from Gazebo |
-| **World** | | |
-| `world` | `ugv_test_arena.sdf` | Path to any Gazebo SDF world file |
-| `world_name` | `world_demo` | Must match `<world name="...">` inside the SDF |
-| **Robot** | | |
-| `robot_name` | `localbot` | Entity name in Gazebo, used in all GZ topic paths |
-| `spawn_x` | `0.0` | Spawn X position (metres, East) |
-| `spawn_y` | `-6.5` | Spawn Y position (metres, North) |
-| `spawn_z` | `0.01` | Spawn Z position (metres above ground) |
-| `spawn_yaw` | `1.5708` | Spawn yaw angle (rad): 1.5708=N, 0=E, 3.14=S |
-| **Perception** | | |
-| `camera_type` | `sim` | Depth source: `sim`\|`monocular`\|`realsense`\|`zed` |
-| `enable_depth_viz` | `false` | Run Depth Anything V3 overlay in RViz (GPU) |
-| **SLAM** | | |
-| `enable_rtabmap` | `true` | Enable RTAB-Map SLAM |
-| **Navigation** | | |
-| `nav2_params_file` | `nav2_params.yaml` | Path to Nav2 YAML (override without rebuild) |
-| **Visualization** | | |
-| `enable_rviz` | `true` | Launch RViz2 |
-| `rviz_config` | `ugv_autonomy.rviz` | Path to RViz config file |
-
----
-
-## 3. Common Recipes
+### Required ROS 2 packages
 
 ```bash
-# ── Default simulation (everything) ──────────────────────────────────────────
+sudo apt install -y \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-nav2-msgs \
+  ros-jazzy-rtabmap-ros \
+  ros-jazzy-robot-localization \
+  ros-jazzy-ros-gz-bridge \
+  ros-jazzy-ros-gz-sim \
+  ros-jazzy-cv-bridge \
+  ros-jazzy-sensor-msgs-py \
+  ros-jazzy-xacro
+```
+
+### Required Python packages
+
+```bash
+pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu124
+pip install transformers ultralytics pillow opencv-python-headless
+```
+
+> The Depth Anything V2 Metric model (~300 MB) downloads automatically from HuggingFace on first run when `enable_depth_viz:=true`.
+
+---
+
+## Installation
+
+```bash
+# 1. Clone
+git clone https://github.com/PrakashKumarSahu/Autonomous-UGV.git
+cd Autonomous-UGV
+
+# 2. Build
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+
+# 3. Source
+source install/setup.bash
+```
+
+> **Tip:** Add `source ~/Autonomous-UGV/install/setup.bash` to your `~/.bashrc`.
+
+---
+
+## Quick Start
+
+### Default simulation (recommended)
+
+```bash
 ros2 launch ugv_bringup ugv_complete.launch.py
+```
 
-# ── Custom world + spawn position ────────────────────────────────────────────
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  world:=$(ros2 pkg prefix ugv_sim)/share/ugv_sim/worlds/empty_world.sdf \
-  world_name:=empty \
-  spawn_x:=0.0  spawn_y:=0.0  spawn_z:=0.01  spawn_yaw:=0.0
+Launches Gazebo with `ugv_test_arena.sdf`, spawns the robot, starts all perception/SLAM/Nav2 nodes, and opens RViz.
 
-# ── Completely custom world (any SDF file) ────────────────────────────────────
+### Set a navigation goal
+
+In RViz, click **2D Nav Goal** (toolbar), then click + drag on the map to set the robot's target pose. Nav2 plans a collision-free path and drives to the goal.
+
+### Custom world
+
+```bash
 ros2 launch ugv_bringup ugv_complete.launch.py \
   world:=/path/to/my_world.sdf \
   world_name:=my_world \
-  spawn_x:=5.0  spawn_y:=2.0  spawn_yaw:=3.14
-
-# ── Hardware + RealSense ──────────────────────────────────────────────────────
-ros2 launch realsense2_camera rs_launch.py       # terminal 1
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  mode:=hw  camera_type:=realsense  use_sim_time:=false
-
-# ── Hardware + ZED ────────────────────────────────────────────────────────────
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2   # terminal 1
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  mode:=hw  camera_type:=zed  use_sim_time:=false
-
-# ── Custom Nav2 config (no rebuild needed) ────────────────────────────────────
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  nav2_params_file:=/path/to/my_nav2_params.yaml
-
-# ── Headless (no RViz — useful for remote/CI) ─────────────────────────────────
-ros2 launch ugv_bringup ugv_complete.launch.py enable_rviz:=false
-
-# ── SLAM debug only (no Nav2) ─────────────────────────────────────────────────
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  enable_rtabmap:=true  # Launch just sim+perception+SLAM+RViz, skip Nav2
-  # (Nav2 is always included via ugv_complete.launch.py; for SLAM-only testing
-  #  launch modules individually — see Section 18)
-
-# ── Reset map ─────────────────────────────────────────────────────────────────
-ros2 service call /rtabmap/reset std_srvs/srv/Empty
+  spawn_x:=1.0 spawn_y:=2.0 spawn_yaw:=0.0
 ```
 
----
+> `world_name` must match the `<world name="...">` attribute in your SDF file.
 
-## 4. Send Navigation Goals
+### Empty world (no obstacles)
 
 ```bash
-# Via RViz: use the "Nav2 Goal" tool in the toolbar (click + drag for heading)
-
-# Via CLI:
-ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
-  '{pose: {header: {frame_id: "map"},
-    pose: {position: {x: 0.0, y: 6.0, z: 0.0},
-           orientation: {w: 1.0}}}}'
-
-# Test arena suggested goals (after SLAM builds):
-# North through all obstacles: x=0,  y=6
-# NW corridor:                 x=-7, y=5
-# NE side (near L-wall):       x=7,  y=5
-# Arena center (zigzag zone):  x=0,  y=0
-```
-
----
-
-## 5. Module Overview
-
-Each module has a single clean interface — it provides a set of ROS topics and requires a set of ROS topics. You can work on any module by reading only its section.
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  SIMULATION MODULE  (ugv_sim)                                            │
-│                                                                          │
-│  ugv_test_arena.sdf   empty_world.sdf   <any custom SDF>                │
-│    ↓ world (no robot)                                                    │
-│  Gazebo Harmonic ←────────── GZ_SIM_RESOURCE_PATH                       │
-│    ↓                                                                     │
-│  ros_gz_sim create                   ← sim.launch.py spawns Localbot    │
-│    ↓ spawns model://localbot at (spawn_x, spawn_y, spawn_yaw)           │
-│                                                                          │
-│  Dynamic GZ Bridge  (OpaqueFunction → temp YAML, parametric)            │
-│    GZ /world/{world_name}/model/{robot_name}/...  →  ROS /camera/*      │
-│                                                   →  /imu/data          │
-│                                                   →  /odometry/filtered │
-│                                                   →  /tf                │
-│                                                   →  /joint_states      │
-│    ROS /cmd_vel  →  GZ /model/{robot_name}/cmd_vel                      │
-│                                                                          │
-│  joint_state_relay.py   (QoS bridge: BestEffort→Reliable)               │
-│    /joint_states (BE) → /joint_states_urdf (Reliable)                   │
-└──────────────────────────────────────────────────────────────────────────┘
-         │                   │                           │
-         ▼                   ▼                           ▼
-┌──────────────┐  ┌────────────────────┐  ┌────────────────────────────────┐
-│  DESCRIPTION │  │    PERCEPTION      │  │           SLAM                 │
-│  ugv_desc..  │  │    ugv_perception  │  │   localization.launch.py       │
-│              │  │                    │  │                                │
-│  RSP: URDF   │  │  ONE depth source: │  │  rgbd_sync: RGB+depth→RGBD    │
-│  → /tf_static│  │  sim/mono/RS/zed   │  │  rtabmap:  RGBD→/map           │
-│  → /tf (whl) │  │  → /perception/   │  │            → map→odom TF       │
-│              │  │    depth/*         │  │                                │
-│  Needs:      │  │                    │  │  Needs: /rtabmap/rgbd_image    │
-│  /joint_     │  │  point_cloud_xyz   │  │         /odometry/filtered     │
-│  states_urdf │  │  → /perception/   │  │                                │
-│              │  │    depth/points    │  │  (EKF in hw mode)              │
-│              │  │                    │  │                                │
-│              │  │  yolo_seg_node     │  │                                │
-│              │  │  → /perception/   │  │                                │
-│              │  │    yolo/overlay    │  │                                │
-│              │  │  → /perception/   │  │                                │
-│              │  │    hazard_mask     │  │                                │
-└──────────────┘  └────────────────────┘  └────────────────────────────────┘
-                              │                           │
-                              ▼                           ▼
-                  ┌─────────────────────────────────────────────────────────┐
-                  │                  NAVIGATION  (Nav2)                     │
-                  │           navigation.launch.py                          │
-                  │                                                         │
-                  │  Local costmap  (ObstacleLayer + InflationLayer)        │
-                  │    ← /perception/depth/points (camera point cloud)      │
-                  │  Global costmap (StaticLayer)                           │
-                  │    ← /map (from RTAB-Map)                               │
-                  │                                                         │
-                  │  Smac2D Planner → /plan                                 │
-                  │  RPP Controller → /cmd_vel                              │
-                  │  BT Navigator  ← /navigate_to_pose action               │
-                  └─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 6. Data Flow Diagram
-
-```
-Gazebo depth_camera (30 Hz, 32FC1 metres)
-  └──[GZ bridge, BestEffort]──→ /camera/depth/image_raw
-       ├──[depth_relay_node (sim)]──→ /perception/depth/image_raw (Reliable)
-       │    ├──[point_cloud_xyz_node]──→ /perception/depth/points
-       │    │    └──[Nav2 ObstacleLayer]──→ local costmap obstacle cells
-       │    └──[rgbd_sync]
-       │         + /camera/image_raw
-       │         + /camera/camera_info
-       │         ↓
-       │    /rtabmap/rgbd_image
-       │         └──[rtabmap SLAM]──→ /map (Transient Local, ~1 Hz)
-       │                           └──→ map→odom TF (~1 Hz)
-       │
-       └──[Nav2 RPP Controller]──→ /cmd_vel (20 Hz)
-                                         │
-              Gazebo DiffDrive ←────────[GZ bridge]
-                └──→ /odometry/filtered (20 Hz)
-                └──→ /tf (odom→base_footprint, 20 Hz)
-                └──→ /joint_states (BestEffort, 50 Hz)
-                          └──[joint_state_relay]──→ /joint_states_urdf (Reliable)
-                                    └──[RSP]──→ /tf_static + wheel TF
-```
-
----
-
-## 7. TF Frame Tree
-
-```
-map          (published by rtabmap at ~1 Hz when SLAM builds first keyframe)
- └── odom    (published by GZ bridge DiffDrive at ~20 Hz — available immediately)
-      └── base_footprint  (virtual ground projection)
-           └── base_link  (chassis center)
-                ├── left_wheel_link   ← left_wheel_joint (continuous, from joint_states_urdf)
-                ├── right_wheel_link  ← right_wheel_joint (continuous)
-                ├── front_caster_wheel_link  ← fixed
-                ├── rear_caster_wheel_link   ← fixed
-                ├── imu_link                 ← fixed
-                └── camera_link              ← fixed (at 0.0553, 0, 0.4323 from base_link)
-                      └── camera_link_optical ← fixed (-π/2 optical rotation)
-```
-
-> [!IMPORTANT]
-> RViz Fixed Frame should be `odom` (always available from t=0). Switching to `map` gives the SLAM coordinate view but `map` only exists after RTAB-Map builds its first keyframe (~30s).
-
----
-
-## 8. Topic Reference
-
-| Topic | Type | QoS | Publisher → Consumer |
-|-------|------|-----|---------------------|
-| `/camera/image_raw` | Image | BestEffort | GZ bridge → rgbd_sync, yolo |
-| `/camera/camera_info` | CameraInfo | BestEffort | GZ bridge → rgbd_sync |
-| `/camera/depth/image_raw` | Image (32FC1) | BestEffort | GZ bridge → depth_relay |
-| `/camera/depth/camera_info` | CameraInfo | BestEffort | GZ bridge → depth_relay |
-| `/perception/depth/image_raw` | Image (32FC1) | Reliable | depth_relay → rgbd_sync, pt cloud |
-| `/perception/depth/camera_info` | CameraInfo | Reliable | depth_relay → pt cloud |
-| `/perception/depth/points` | PointCloud2 | Reliable | pt cloud → Nav2 ObstacleLayer |
-| `/perception/yolo/overlay` | Image | Reliable | yolo → RViz |
-| `/perception/hazard_mask` | Image | Reliable | yolo → terrain |
-| `/rtabmap/rgbd_image` | RGBDImage | Reliable | rgbd_sync → rtabmap |
-| `/map` | OccupancyGrid | Reliable+TL | rtabmap → Nav2 StaticLayer, RViz |
-| `/odometry/filtered` | Odometry | Reliable | GZ bridge → rtabmap, Nav2 |
-| `/cmd_vel` | Twist | Reliable | Nav2 RPP → GZ bridge → Localbot |
-| `/joint_states` | JointState | BestEffort | GZ bridge → joint_relay |
-| `/joint_states_urdf` | JointState | Reliable | joint_relay → RSP |
-| `/tf` | TFMessage | Reliable | GZ+rtabmap+RSP → all |
-| `/tf_static` | TFMessage | Reliable+TL | RSP → all |
-| `/plan` | Path | Reliable | Nav2 planner → controller, RViz |
-| `/local_costmap/costmap` | OccupancyGrid | Reliable | Nav2 → RViz |
-| `/global_costmap/costmap` | OccupancyGrid | Reliable | Nav2 → RViz |
-
-> [!CAUTION]
-> **QoS mismatch = silent data loss.** Reliable publisher + BestEffort subscriber = zero bytes received in DDS. Always verify with `ros2 topic info <topic> --verbose` when debugging missing data.
-
----
-
-## 9. Simulation (ugv\_sim)
-
-**Package**: `ugv_sim`  
-**Provides**: Sensor data, odometry, TF, clock  
-**Requires** (from ROS): `/cmd_vel`
-
-### Key files
-
-| File | Purpose |
-|------|---------|
-| `worlds/ugv_test_arena.sdf` | Default obstacle course (zero Fuel dependencies) |
-| `worlds/empty_world.sdf` | Minimal flat world — template for custom worlds |
-| `models/localbot/model.sdf` | Complete robot SDF (cameras, IMU, DiffDrive) |
-| `models/localbot/model.config` | Required for `model://localbot` URI resolution |
-| `launch/sim.launch.py` | Gazebo + dynamic bridge + spawner + RSP + relay |
-| `scripts/joint_state_relay.py` | QoS bridge: BestEffort → Reliable for joint states |
-
-### How the dynamic bridge works
-
-`sim.launch.py` uses `OpaqueFunction` to run Python code at launch runtime (when `LaunchConfiguration` values are resolved to strings). It calls `_make_bridge_yaml(world_name, robot_name)` which builds the complete bridge config as a Python dict, writes it to a temp YAML file, and passes the path to `ros_gz_bridge`. This means **any world name and any robot name work without changing any config file**.
-
-### Localbot robot specs
-
-| Property | Value | Matches URDF? |
-|----------|-------|--------------|
-| Wheel radius | 0.1 m | ✅ (TugBot was 0.195 m) |
-| Wheel separation | 0.45 m | ✅ (TugBot was 0.5605 m) |
-| Left wheel joint | `left_wheel_joint` | ✅ (TugBot had reversed naming) |
-| Right wheel joint | `right_wheel_joint` | ✅ |
-| Camera position | `0.0553, 0, 0.4323` from base_link | ✅ |
-| Camera link name | `camera_link` | ✅ |
-| Sensors | RGB + depth_camera + IMU | ✅ only used sensors |
-
-### GZ_SIM_RESOURCE_PATH
-
-Set in `sim.launch.py` to: `install/ugv_sim/share/ugv_sim/models : ~/.gz/fuel/...`
-
-Local install directory comes **first**. `model://localbot` resolves to `install/ugv_sim/share/ugv_sim/models/localbot/model.sdf`. **Never use a Fuel URL** for the robot — it bypasses local changes.
-
----
-
-## 10. Robot Description (ugv\_description)
-
-**Package**: `ugv_description`  
-**Provides**: `/tf_static` (fixed joints), `/tf` (wheel joints via RSP)  
-**Requires**: `/joint_states_urdf` (from joint_state_relay)
-
-### URDF structure
-
-```
-ugv.urdf.xacro                    ← top-level (includes base + sensors)
-├── ugv_base.urdf.xacro           ← chassis, wheels (box/cylinder geometry — no mesh)
-├── sensors/camera.urdf.xacro     ← camera_link, camera_link_optical
-└── sensors/imu.urdf.xacro        ← imu_link
-```
-
-**No external mesh dependencies** — all geometry is primitive SDF/URDF shapes (box, cylinder). The TugBot `.dae` meshes were removed when Localbot was created.
-
-### URDF link tree
-
-```
-base_footprint → base_link (navy box, 0.6×0.4×0.2m)
-  ├── left_wheel_link  (orange cylinder, r=0.1m)
-  ├── right_wheel_link (orange cylinder, r=0.1m)
-  ├── front_caster_wheel_link
-  ├── rear_caster_wheel_link
-  ├── camera_link (grey box at 0.0553, 0, 0.4323 from base_link)
-  │   └── camera_link_optical (optical frame, −π/2 rotation)
-  └── imu_link
-```
-
----
-
-## 11. Perception (ugv\_perception)
-
-**Package**: `ugv_perception`  
-**Launch**: `ugv_bringup/launch/perception.launch.py`  
-**Provides**: Standardised depth topics, point cloud, YOLO overlay  
-**Requires**: `/camera/image_raw`, `/camera/camera_info`, `/camera/depth/*`
-
-### Depth source selection
-
-Exactly **one** depth source is active at a time (selected by `camera_type` launch arg). All publish to the same standardised output interface:
-
-| `camera_type` | Node | Input | Notes |
-|---------------|------|-------|-------|
-| `sim` (default) | `depth_relay_node` | `/camera/depth/*` (BestEffort) | Gazebo real depth sensor |
-| `monocular` | `depth_node` | `/camera/image_raw` | Depth Anything V3 (relative depth) |
-| `realsense` | `realsense_relay_node` | `/camera/camera/depth/*` | Metric depth, prerequisite: `rs_launch.py` |
-| `zed` | `zed_relay_node` | `/zed/zed_node/depth/*` | Metric depth, prerequisite: `zed_camera.launch.py` |
-
-**Standardised output** (same for all sources):
-```
-/perception/depth/image_raw    (32FC1, metres, frame: camera_link_optical)
-/perception/depth/camera_info  (matching CameraInfo)
-```
-
-Nothing downstream (Nav2, RTAB-Map, terrain) changes when the source changes.
-
-### Shared nodes (always active)
-
-| Node | Input | Output |
-|------|-------|--------|
-| `point_cloud_xyz_node` | `/perception/depth/*` | `/perception/depth/points` (PointCloud2) |
-| `yolo_seg_node` | `/camera/image_raw` | `/perception/yolo/overlay`, `/perception/hazard_mask` |
-| `depth_viz_node` | `/camera/image_raw` | `/perception/depth_ai/image_raw` (if `enable_depth_viz:=true`) |
-
----
-
-## 12. SLAM (localization.launch.py)
-
-**Launch**: `ugv_bringup/launch/localization.launch.py`  
-**Provides**: `/map` (OccupancyGrid), map→odom TF  
-**Requires**: `/camera/image_raw`, `/camera/camera_info`, `/perception/depth/image_raw`, `/odometry/filtered`
-
-### Nodes
-
-| Node | Package | Purpose |
-|------|---------|---------|
-| `rgbd_sync` | `rtabmap_sync` | Synchronises RGB + depth + CameraInfo → RGBDImage |
-| `rtabmap` | `rtabmap_slam` | Visual SLAM: builds map, publishes map→odom TF |
-| `ekf_filter_node` | `robot_localization` | Sensor fusion (hw mode only, `mode:=hw`) |
-
-### Key parameters (in `config/rtabmap.yaml`)
-
-| Parameter | Value | Reason |
-|-----------|-------|--------|
-| `RGBD/LinearUpdate` | `"0.0"` | Keyframe on every frame → /map at startup without movement |
-| `RGBD/AngularUpdate` | `"0.0"` | Same |
-| `map_always_update` | `True` | Republish /map at ~1Hz between keyframes |
-| `Grid/CellSize` | `"0.10"` | 10cm resolution = matches global_costmap |
-| `Grid/FromDepth` | `"true"` | Build map from depth camera (no lidar) |
-| `Reg/Force3DoF` | `"true"` | 2D SLAM for flat-ground UGV |
-| `wait_for_transform` | `1.0` | Prevents TF lookup failure during Gazebo startup |
-
-**Map reset**: `ros2 service call /rtabmap/reset std_srvs/srv/Empty`  
-**Reuse saved map**: In `localization.launch.py`, set `'delete_db_on_start': False` and remove `arguments=['-d']`.
-
----
-
-## 13. Navigation (navigation.launch.py)
-
-**Launch**: `ugv_bringup/launch/navigation.launch.py`  
-**Provides**: `/cmd_vel`, `/plan`, costmaps  
-**Requires**: `/map`, `/odometry/filtered`, `/perception/depth/points`, `/tf`
-
-### Nav2 stack
-
-| Node | Plugin | Purpose |
-|------|--------|---------|
-| `controller_server` | `RegulatedPurePursuitController` | Path following |
-| `planner_server` | `SmacPlanner2D` | Global path planning |
-| `behaviors` | Spin, Backup, Wait | Recovery behaviors |
-| `bt_navigator` | NavigateToPose BT | Goal orchestration |
-
-### Key parameters (in `config/nav2_params.yaml`)
-
-| Parameter | Value | Reason |
-|-----------|-------|--------|
-| `failure_tolerance` | 1.0 | Sim-clock jumps + 1Hz map→odom TF cause brief failures |
-| `movement_time_allowance` | 25.0 s | Allows replanning pauses |
-| `transform_tolerance` (RPP) | 1.0 | Matches RTAB-Map's 1Hz TF update rate |
-| `use_collision_detection` | `false` | Costmap handles this; RPP collision checker caused phantom stops |
-| `observation_persistence` | 0.5 s | Front-only camera: clear stale obstacles fast during turns |
-| `inflation_radius` | 0.55 m | ~2× robot radius; tune if narrow passages are blocked |
-
-**Custom Nav2 config** (no rebuild needed):
-```bash
-ros2 launch ugv_bringup ugv_complete.launch.py nav2_params_file:=/path/to/my_params.yaml
-```
-
----
-
-## 14. Terrain Analysis (ugv\_terrain)
-
-**Package**: `ugv_terrain`  
-**Provides**: 2.5D traversability grid map  
-**Requires**: `/perception/depth/points`, `/perception/hazard_mask`, `/perception/depth/camera_info`
-
-Fuses depth-based height estimation with YOLO hazard masks. Camera intrinsics (fx, fy) are read from live `/camera_info` — not hardcoded.
-
----
-
-## 15. Using a Custom World
-
-The simulation is fully decoupled from any specific world file. The robot is **spawned separately** via `ros_gz_sim create`, not embedded in the world SDF.
-
-### Requirements for a custom world SDF
-
-1. **No robot model** — do NOT include `<include>` for the robot
-2. **World-level system plugins** — must have Physics, UserCommands, SceneBroadcaster, Imu, Sensors
-3. **Sensors plugin must use ogre2** — required for depth_camera
-4. **`start_paused: false`** — robot sensors need to publish immediately
-5. **Any world name** — set `world_name:=` launch arg to match `<world name="...">`
-
-### Step-by-step
-
-```bash
-# 1. Start from the empty world template
-cp $(ros2 pkg prefix ugv_sim)/share/ugv_sim/worlds/empty_world.sdf ~/my_world.sdf
-
-# 2. Edit ~/my_world.sdf:
-#    - Change <world name="empty"> to <world name="my_world">
-#    - Add obstacles using the template in the file
-#    - Do NOT add robot include
-
-# 3. Launch
 ros2 launch ugv_bringup ugv_complete.launch.py \
-  world:=~/my_world.sdf \
-  world_name:=my_world \
-  spawn_x:=0.0  spawn_y:=0.0  spawn_z:=0.01  spawn_yaw:=0.0
+  world:=$(ros2 pkg prefix ugv_sim)/share/ugv_sim/worlds/empty_world.sdf \
+  world_name:=empty_world
 ```
-
-### Built-in worlds
-
-| World SDF | World Name | Description |
-|-----------|-----------|-------------|
-| `ugv_test_arena.sdf` | `world_demo` | 20×16m arena with 5-row obstacle course |
-| `empty_world.sdf` | `empty` | Flat ground only — template for custom worlds |
-
-### Adding obstacles to the test arena
-
-Obstacles are inline SDF primitives. To add one, insert a `<model>` block inside `ugv_test_arena.sdf`:
-
-```xml
-<model name="my_obstacle">
-  <static>true</static>
-  <pose>X Y Z 0 0 0</pose>   <!-- Z = half of object height for boxes -->
-  <link name="link">
-    <visual name="v">
-      <geometry><box><size>W D H</size></box></geometry>
-      <material><ambient>R G B 1</ambient><diffuse>R G B 1</diffuse></material>
-    </visual>
-    <collision name="c">
-      <geometry><box><size>W D H</size></box></geometry>
-    </collision>
-  </link>
-</model>
-```
-
-Then rebuild: `colcon build --packages-select ugv_sim`
 
 ---
 
-## 16. Depth Source Swapping
+## Launch Arguments
 
-All depth sources publish to the same standardised interface — nothing downstream changes:
+All arguments can be passed as `key:=value` on the command line.
+
+| Argument | Default | Description |
+|---|---|---|
+| `mode` | `sim` | `sim` — Gazebo simulation. `hw` — Real hardware (skips Gazebo). |
+| `use_sim_time` | `true` | Use `/clock` from Gazebo. Set `false` in `hw` mode. |
+| `world` | `ugv_test_arena.sdf` | Full path to a Gazebo SDF world file. The world must NOT include the robot (it is spawned separately). |
+| `world_name` | `world_demo` | Must match the `<world name="...">` attribute in the SDF. Used to construct GZ sensor topic paths. |
+| `robot_name` | `localbot` | Gazebo entity name for the spawned robot. Also determines cmd_vel topic path. |
+| `spawn_x/y/z` | `0.0 / -6.5 / 0.01` | Robot spawn position in world frame (metres). |
+| `spawn_yaw` | `1.5708` | Robot spawn orientation (radians). `1.5708` = facing +Y (north). |
+| `camera_type` | `sim` | Depth source. See [Camera / Depth Source Switching](#camera--depth-source-switching). |
+| `enable_depth_viz` | `false` | Run Depth Anything V2 Metric as a side-by-side RViz AI depth overlay. |
+| `enable_rtabmap` | `true` | Enable RTAB-Map visual SLAM. |
+| `enable_rviz` | `true` | Launch RViz2 dashboard. |
+| `rviz_config` | `ugv_autonomy.rviz` | Path to a custom RViz `.rviz` config file. |
+| `nav2_params_file` | `nav2_params.yaml` | Path to custom Nav2 YAML. Override without rebuilding. |
+
+---
+
+## Modules
+
+### `ugv_sim` — Simulation Environment
+
+**Package type:** `ament_cmake`
+**Launch:** `sim.launch.py` (included by `ugv_complete.launch.py`)
+
+Responsibilities:
+- Starts **Gazebo Harmonic** with the given world SDF
+- Spawns **Localbot** from `models/localbot/model.sdf` (independent of the world file — zero fuel dependency)
+- Dynamically generates the **ros\_gz\_bridge YAML** at runtime, parameterized on `world_name` and `robot_name`
+- Starts **robot\_state\_publisher** (URDF → TF)
+- Bridges wheel joint states with **joint\_state\_relay** (QoS fix: Gazebo BestEffort → RSP Reliable)
+
+#### Localbot model
+
+| Property | Value |
+|---|---|
+| Chassis | 0.60 × 0.40 × 0.20 m |
+| Drive | Differential drive, wheel separation 0.45 m, radius 0.10 m |
+| Camera | RGB-D camera at 0.43 m above chassis top (0.64 m total), FOV ~87° |
+| RGB sensor | 848 × 480, 15 FPS |
+| Depth sensor | 848 × 480, 15 FPS, range 0.3–10 m |
+| IMU | 6-DoF (accel + gyro), 200 Hz |
+
+#### Built-in worlds
+
+| World | File | Description |
+|---|---|---|
+| Test arena | `ugv_test_arena.sdf` | Enclosed rectangular arena with walls, pillars, and obstacles |
+| Empty | `empty_world.sdf` | Flat ground plane; bring your own SDF obstacles |
+
+#### Customizing the bridge
+
+The `gazebo_bridge.yaml` in `config/` is a **reference file** kept for documentation. The actual bridge configuration is generated dynamically at launch time from `_make_bridge_yaml()` in `sim.launch.py`. To add new bridged topics, edit that function.
+
+---
+
+### `ugv_description` — Robot Model & TF
+
+**Package type:** `ament_cmake`
+**Launch:** `robot_state_publisher.launch.py`
+
+Provides the robot URDF definition and publishes the TF tree.
+
+#### Frame tree
+
+```
+map (SLAM global frame)
+└── odom (wheel odometry frame)
+    └── base_footprint (2D ground projection)
+        └── base_link (chassis center)
+            ├── left_wheel_link / right_wheel_link
+            ├── front_caster_wheel_link / rear_caster_wheel_link
+            ├── imu_link
+            └── camera_link
+                └── camera_link_optical  ← all sensor data in this frame
+```
+
+#### URDF vs. model.sdf
+
+The URDF (`ugv_base.urdf.xacro`) is used **only** by robot\_state\_publisher for TF and visualization. The Gazebo physics simulation uses `model.sdf` exclusively (spawned with `-file` flag). The `<gazebo>` tags inside the URDF are NOT processed in this setup.
+
+---
+
+### `ugv_perception` — AI Perception Stack
+
+**Package type:** `ament_python`
+**Launch:** `perception.launch.py` (included by `ugv_complete.launch.py`)
+
+#### Canonical depth topic contract
+
+All `camera_type` depth sources are **interchangeable** — they all publish the same three topics with the same QoS:
+
+| Topic | Type | QoS | Consumer |
+|---|---|---|---|
+| `/perception/depth/image_raw` | `Image` (32FC1, metres) | RELIABLE | RTAB-Map, point cloud node |
+| `/perception/depth/camera_info` | `CameraInfo` | RELIABLE | RTAB-Map, point cloud node, terrain node |
+| `/perception/depth/colorized` | `Image` (bgr8 TURBO) | RELIABLE | RViz `RealDepth` panel |
+
+Swapping depth sources requires only changing `camera_type` — nothing else in the pipeline changes.
+
+#### Nodes
+
+**`depth_relay_node`** (`camera_type:=sim`)
+Bridges Gazebo's raw depth camera (BestEffort) to the canonical RELIABLE topics. Converts 32FC1 → TURBO bgr8 colormap for RViz. Handles missing depth camera\_info via fallback to RGB camera\_info.
+
+**`depth_node`** (`camera_type:=monocular`)
+Runs Depth Anything V2 Metric Indoor (HuggingFace `depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf`) on any RGB image. Publishes metric depth in metres. Falls back to a geometric horizon estimate if the model cannot load.
+
+**`realsense_relay_node`** (`camera_type:=realsense`)
+Converts RealSense 16UC1 depth (mm) → 32FC1 (m), clips to valid range, adds TURBO colorization.
+
+**`zed_relay_node`** (`camera_type:=zed`)
+Re-frames ZED 32FC1 depth (already in metres) and adds TURBO colorization.
+
+**`depth_to_pointcloud_node`** (always active)
+Converts `/perception/depth/image_raw` + `/perception/depth/camera_info` → `PointCloud2` for Nav2 ObstacleLayer. Uses every 4th pixel (configurable `step` parameter). Max depth capped at 10 m to match sensor specification and Nav2 obstacle range.
+
+**`yolo_seg_node`** (always active)
+Runs YOLO11n-seg on `/camera/image_raw`. Classifies detected segments:
+- **Lethal (255):** class name contains a hazard keyword (`rock`, `stone`, `boulder`, `tree`, `car`, `person`, etc.)
+- **Caution (128):** detected object with no keyword match (amber overlay in RViz)
+- **Safe (0):** undetected / background regions
+
+> Uses COCO-80 classes by default. COCO does not include `road/trail/grass`, so classification is purely keyword-based. To use outdoor-specific classes, train or fine-tune with a custom dataset.
+
+#### Depth Anything V2 Metric — AI visualization
+
+When `enable_depth_viz:=true`, an additional `depth_node` instance runs as a visualization overlay:
 
 ```bash
-# Simulation (Gazebo real depth sensor)
-ros2 launch ugv_bringup ugv_complete.launch.py camera_type:=sim
-
-# Hardware: Depth Anything V3 (monocular, any RGB camera)
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  mode:=hw  camera_type:=monocular  use_sim_time:=false
-
-# Hardware: Intel RealSense D435/D455
-ros2 launch realsense2_camera rs_launch.py          # start camera driver first
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  mode:=hw  camera_type:=realsense  use_sim_time:=false
-
-# Hardware: Stereolabs ZED 2 / ZED X
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2   # driver first
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  mode:=hw  camera_type:=zed  use_sim_time:=false
+ros2 launch ugv_bringup ugv_complete.launch.py enable_depth_viz:=true
 ```
 
-> [!NOTE]
-> Depth Anything V3 produces **relative depth** (no metric scale). Adequate for obstacle avoidance at UGV speeds. For metric accuracy (needed for precise SLAM), use RealSense or ZED.
+Publishes to `/perception/depth_ai/colorized` (shown in RViz **AIDepth** panel). Does NOT feed Nav2 or SLAM — purely visual. Requires ~2 GB VRAM.
 
 ---
 
-## 17. Configuration Reference
+### `ugv_terrain` — Traversability Mapping
 
-### `config/rtabmap.yaml`
+**Package type:** `ament_python`
+**Launch:** `terrain_mapping.launch.py`
 
-RTAB-Map SLAM configuration. See [Section 12](#12-slam-localizationlaunchpy) for full parameter table.
+**`terrain_analysis_node`:**
+- Subscribes to `/perception/depth/points` and `/perception/hazard_mask`
+- Auto-calibrates camera intrinsics from `/perception/depth/camera_info`
+- Projects 3D points into a 12 × 12 m robot-centric grid at 0.1 m resolution
+- Computes step height cost per cell (max − min elevation within cell)
+- Burns YOLO lethal hazard pixels via geometric back-projection
+- Publishes `/terrain/traversability_grid` (OccupancyGrid, frame: `base_footprint`)
 
-### `config/nav2_params.yaml`
-
-Nav2 full stack configuration. Key sections:
-- `controller_server.ros__parameters.FollowPath` — RPP controller settings
-- `local_costmap.ros__parameters` — obstacle sensing radius, inflation
-- `global_costmap.ros__parameters` — map resolution (must match RTAB-Map)
-- `planner_server` — path planning algorithm and plugin
-
-### `config/ekf.yaml`
-
-Robot localization EKF (only used in `mode:=hw`). Fuses `/odometry/filtered` + `/imu/data`.
+> The traversability grid is currently for RViz visualization. Wiring it into Nav2 as a costmap layer is a planned improvement.
 
 ---
 
-## 18. Standalone Module Launch
+### `ugv_bringup` — SLAM, Nav2 & Orchestration
 
-Each module can be launched independently for development/testing:
+**Package type:** `ament_cmake`
+
+Central package containing all launch files, configs, and the RViz config.
+
+#### `localization.launch.py`
+
+**`rgbd_sync`:** Synchronizes RGB + depth + camera\_info into `/rtabmap/rgbd_image` using approximate time sync (100 ms tolerance).
+
+**`rtabmap`:** Visual SLAM — builds `/map`, publishes `map→odom` TF. Configured for planar 2D. Deletes its database on restart for a fresh map each run. EKF (`ekf_node`) runs **only** in `mode:=hw`.
+
+#### `navigation.launch.py`
+
+| Node | Role |
+|---|---|
+| `controller_server` | Regulated Pure Pursuit at 20 Hz |
+| `planner_server` | SmacPlanner2D global path planner |
+| `behavior_server` | Spin / BackUp / Wait recovery behaviors |
+| `bt_navigator` | Behavior Tree goal orchestration |
+| `lifecycle_manager_navigation` | Manages node lifecycles |
+
+The robot declares itself stuck if it fails to move 0.30 m in 8 seconds, then attempts recovery (Spin → BackUp → Wait → abort goal).
+
+#### `ugv_complete.launch.py`
+
+Single entry point for the entire system. Launches all sub-modules in dependency order.
+
+---
+
+### `ugv_control` — Hardware ros2\_control (Future)
+
+Contains ros2\_control spawner configuration for `joint_state_broadcaster` and `diff_drive_controller`. **Not launched** in the current system. Scaffold for future hardware integration when a physical robot with ros2\_control hardware interfaces is available.
+
+---
+
+## Configuration Reference
+
+### `nav2_params.yaml`
+
+`src/ugv_bringup/config/nav2_params.yaml`
+
+| Parameter | Value | Effect |
+|---|---|---|
+| `movement_time_allowance` | 8.0 s | Declares stuck if <0.30 m progress in 8 s |
+| `required_movement_radius` | 0.30 m | Minimum progress distance |
+| `failure_tolerance` | 0.5 s | Controller error tolerance before recovery |
+| `desired_linear_vel` | 0.4 m/s | Cruising speed |
+| `use_collision_detection` | `true` | RPP stops if path will hit costmap obstacle |
+| `inflation_radius` | 0.75 m | Safety margin around all obstacles |
+| `transform_tolerance` | 1.0 s | Allows 1 s TF latency (RTAB-Map ~1 Hz) |
+| `allow_unknown` | `true` | Planner can route through unmapped space |
+
+### `rtabmap.yaml`
+
+`src/ugv_bringup/config/rtabmap.yaml`
+
+| Parameter | Value | Effect |
+|---|---|---|
+| `RGBD/LinearUpdate` | `0.0` | Keyframe on every frame (map published immediately) |
+| `Grid/RangeMax` | `10.0` | Matches depth sensor max range |
+| `Grid/CellSize` | `0.10` | 10 cm map resolution |
+| `Reg/Force3DoF` | `true` | Planar SLAM |
+| `wait_for_transform` | `1.0` | Generous TF wait during startup |
+
+### `ekf.yaml` (hardware mode only)
+
+`src/ugv_bringup/config/ekf.yaml`
+
+Fuses wheel odometry + IMU yaw rate in hardware mode. Not active in simulation.
+
+---
+
+## RViz Dashboard
+
+Pre-configured dashboard (`ugv_autonomy.rviz`) — Fixed Frame: `map`:
+
+| Panel | Topic | Purpose |
+|---|---|---|
+| **Map** | `/map` | SLAM occupancy grid |
+| **GlobalCostmap** | `/global_costmap/costmap` | Global planning space |
+| **LocalCostmap** | `/local_costmap/costmap` | Local obstacle avoidance |
+| **Path** | `/plan` | Planned global path |
+| **RealDepth** | `/perception/depth/colorized` | Live colorized depth |
+| **AIDepth** | `/perception/depth_ai/colorized` | DA V2 Metric overlay (if enabled) |
+| **YOLO** | `/perception/yolo/overlay` | YOLO11 segmentation |
+| **PointCloud** | `/perception/depth/points` | 3D obstacle cloud |
+| **Traversability** | `/terrain/traversability_grid` | Rolling terrain cost grid |
+
+---
+
+## Worlds
+
+### World file requirements
+
+1. Must NOT contain the robot model (robot is spawned separately)
+2. The `<world name="...">` attribute must match the `world_name` launch arg
+3. Encode as UTF-8
+
+### Using Gazebo Fuel worlds
 
 ```bash
-# Simulation only (no perception/SLAM/Nav2)
-ros2 launch ugv_sim sim.launch.py
+# Download a Fuel world:
+gz fuel download --url "https://fuel.gazebosim.org/1.0/OpenRobotics/worlds/Warehouse" -t world
 
-# Simulation with custom world
-ros2 launch ugv_sim sim.launch.py \
-  world:=~/my_world.sdf  world_name:=my_world \
-  spawn_x:=0  spawn_y:=0  spawn_yaw:=0
-
-# Robot description only (URDF + TF)
-ros2 launch ugv_description robot_state_publisher.launch.py
-
-# Perception only (requires camera topics to be active)
-ros2 launch ugv_bringup perception.launch.py camera_type:=sim
-
-# SLAM only (requires /camera/* and /odometry/filtered)
-ros2 launch ugv_bringup localization.launch.py
-
-# Navigation only (requires /map and /odometry/filtered and /tf)
-ros2 launch ugv_bringup navigation.launch.py
-
-# RViz only
-ros2 launch ugv_bringup rviz.launch.py
+# Launch with it:
+ros2 launch ugv_bringup ugv_complete.launch.py \
+  world:=~/.gz/fuel/fuel.gazebosim.org/openrobotics/worlds/warehouse/1/warehouse.sdf \
+  world_name:=warehouse \
+  spawn_x:=0.0 spawn_y:=0.0
 ```
 
 ---
 
-## 19. Troubleshooting
+## Camera / Depth Source Switching
 
-### SLAM map not appearing
+### `camera_type:=sim` (default)
 
-1. Wait ≥ 45 s — Gazebo starts camera at ~15s, RTAB-Map needs a few more seconds
-2. `ros2 topic hz /camera/depth/image_raw` → must be ~30 Hz
-3. `ros2 topic hz /rtabmap/rgbd_image` → must be ≥ 5 Hz
-4. `ros2 topic echo /map --no-arr --once` → must print data
-5. Force reset: `ros2 service call /rtabmap/reset std_srvs/srv/Empty`
+Gazebo built-in depth camera. Metric depth, 0.3–10 m.
 
-### Gazebo crashes on launch
+### `camera_type:=monocular`
 
-The old `tugbot_warehouse.sdf` downloads 8+ Fuel models via HTTP — a timeout causes abort. Solution: use `ugv_test_arena.sdf` (default) which has zero Fuel dependencies.
-
-### Robot not appearing in Gazebo
-
-The robot is now spawned 3 seconds after Gazebo starts via `ros_gz_sim create`. If it doesn't appear:
-1. Check `ls install/ugv_sim/share/ugv_sim/models/localbot/` — must have `model.sdf`
-2. If missing: `colcon build --packages-select ugv_sim`
-3. Check the spawn_node output for errors (topic creation timeout means Gazebo wasn't ready)
-
-### Robot stops mid-navigation
-
-1. `ros2 topic hz /odometry/filtered` → must be ~20 Hz
-2. `ros2 run tf2_ros tf2_echo map odom` → must succeed
-3. Check goal reachability — robot may be genuinely blocked
-4. `ros2 topic echo /cmd_vel --once` → check non-zero values are published
-
-### Custom world: sensors not working
-
-Verify your world SDF has:
-```xml
-<plugin name='ignition::gazebo::systems::Sensors' filename='ignition-gazebo-sensors-system'>
-  <render_engine>ogre2</render_engine>   <!-- ogre v1 does NOT support depth_camera -->
-</plugin>
-<plugin name='ignition::gazebo::systems::Imu' filename='ignition-gazebo-imu-system'/>
-```
-And verify `world_name:=` matches `<world name="...">` in your SDF.
-
-### RViz robot model flickers white
-
-Caused by `robot_state_publisher` receiving unknown joint names → TF breaks → RViz shows white mesh for 1 frame.  
-Fix: `joint_state_relay.py` filters to URDF wheel joints only. If adding joints, also add them to `URDF_WHEEL_JOINTS` in the relay.
-
-### Wrong camera frame in depth images
-
-Check `ros2 topic echo /camera/depth/image_raw --no-arr --once | grep frame_id`. Must be `camera_link_optical`. If not, verify the bridge is running and `world_name`/`robot_name` match the actual world/model names in Gazebo.
-
----
-
-## 20. Debugging Commands
+Depth Anything V2 Metric Indoor on any RGB camera. Requires GPU.
 
 ```bash
+ros2 launch ugv_bringup ugv_complete.launch.py mode:=hw camera_type:=monocular use_sim_time:=false
+```
+
+Model auto-downloads (~300 MB) and caches in `~/.cache/huggingface/`.
+
+### `camera_type:=realsense`
+
+Requires `realsense2_camera` and Intel D435/D455.
+
+```bash
+ros2 launch realsense2_camera rs_launch.py &
+ros2 launch ugv_bringup ugv_complete.launch.py mode:=hw camera_type:=realsense use_sim_time:=false
+```
+
+### `camera_type:=zed`
+
+Requires ZED SDK and `zed-ros2-wrapper`.
+
+```bash
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2 &
+ros2 launch ugv_bringup ugv_complete.launch.py mode:=hw camera_type:=zed use_sim_time:=false
+```
+
+---
+
+## AI Depth Visualization
+
+Run Depth Anything V2 Metric alongside Gazebo for visual comparison:
+
+```bash
+ros2 launch ugv_bringup ugv_complete.launch.py enable_depth_viz:=true
+```
+
+Publishes AI depth to `/perception/depth_ai/colorized` (RViz **AIDepth** panel). Does NOT feed navigation. Requires ~2 GB VRAM.
+
+---
+
+## Key Topics
+
+| Topic | Type | Publisher | Consumers |
+|---|---|---|---|
+| `/camera/image_raw` | `Image` (bgr8) | ros_gz_bridge | YOLO, RTAB-Map, depth\_node |
+| `/camera/depth/image_raw` | `Image` (32FC1) | ros_gz_bridge | depth\_relay |
+| `/odometry/filtered` | `Odometry` | ros_gz_bridge | RTAB-Map, Nav2 |
+| `/perception/depth/image_raw` | `Image` (32FC1, RELIABLE) | depth relay | depth\_to\_pointcloud, RTAB-Map |
+| `/perception/depth/camera_info` | `CameraInfo` (RELIABLE) | depth relay | depth\_to\_pointcloud, terrain |
+| `/perception/depth/colorized` | `Image` (bgr8, RELIABLE) | depth relay | RViz RealDepth |
+| `/perception/depth/points` | `PointCloud2` (RELIABLE) | depth\_to\_pointcloud | Nav2 ObstacleLayer |
+| `/perception/hazard_mask` | `Image` (mono8) | yolo\_seg | terrain\_analysis |
+| `/perception/yolo/overlay` | `Image` (bgr8) | yolo\_seg | RViz |
+| `/terrain/traversability_grid` | `OccupancyGrid` | terrain\_analysis | RViz |
+| `/map` | `OccupancyGrid` | RTAB-Map | Nav2 global\_costmap |
+| `/cmd_vel` | `Twist` | Nav2 | Gazebo DiffDrive |
+
+---
+
+## TF Tree
+
+```
+map  ←────────────── RTAB-Map (map→odom correction)
+│
+└── odom  ←──────── Gazebo DiffDrive (continuous wheel odometry)
+    │
+    └── base_footprint
+        │
+        └── base_link
+            ├── left_wheel_link
+            ├── right_wheel_link
+            ├── front_caster_wheel_link
+            ├── rear_caster_wheel_link
+            ├── imu_link
+            └── camera_link
+                └── camera_link_optical   ← all sensor data in this frame
+```
+
+---
+
+## Known Limitations
+
+1. **Traversability grid not in Nav2 costmap.** Computed at high frequency but not wired as a costmap layer. Currently visualization-only.
+
+2. **YOLO uses COCO-80 classes.** No outdoor terrain classes in COCO. Hazard detection is keyword-based. Fine-tune on a domain-specific dataset for real field use.
+
+3. **30 cm depth blind spot.** Gazebo depth camera near-clip is 0.3 m. Objects closer than 30 cm are invisible. The 0.75 m inflation radius mitigates this in practice.
+
+4. **Monocular SLAM drift.** No stereo or IMU fusion in sim mode. Long featureless corridors cause drift; loop closure re-aligns.
+
+5. **Camera URDF/SDF 15 mm offset.** Depth and RGB physical origins differ by 15 mm but share one URDF frame. Below the 10 cm map cell resolution — negligible impact.
+
+6. **Hardware mode is a scaffold.** `ugv_control` (ros2\_control) is not fully wired. Perception and SLAM work in `mode:=hw`; motor control requires additional setup.
+
+---
+
+## Developer Guide
+
+### Building a single package
+
+```bash
+colcon build --symlink-install --packages-select ugv_perception
 source install/setup.bash
-
-# ── Topic health ──────────────────────────────────────────────────────────────
-ros2 topic hz /camera/image_raw          # expect 30 Hz
-ros2 topic hz /camera/depth/image_raw    # expect 30 Hz
-ros2 topic hz /perception/depth/points  # expect 30 Hz
-ros2 topic hz /rtabmap/rgbd_image        # expect 5-15 Hz
-ros2 topic hz /odometry/filtered         # expect 20 Hz
-ros2 topic hz /map                       # expect ~1 Hz (TL — may show 0 Hz)
-ros2 topic hz /joint_states_urdf         # expect 50 Hz
-
-# ── QoS diagnosis ─────────────────────────────────────────────────────────────
-ros2 topic info /map --verbose                        # check Transient Local
-ros2 topic info /camera/image_raw --verbose           # check BestEffort
-ros2 topic info /perception/depth/image_raw --verbose # check Reliable
-
-# ── TF tree ───────────────────────────────────────────────────────────────────
-ros2 run tf2_tools view_frames        # generates frames.pdf
-ros2 run tf2_ros tf2_echo map odom    # SLAM transform
-ros2 run tf2_ros tf2_echo odom base_footprint  # wheel odometry
-
-# ── Nav2 state ────────────────────────────────────────────────────────────────
-ros2 lifecycle get /controller_server
-ros2 lifecycle get /planner_server
-ros2 lifecycle get /bt_navigator
-
-# ── SLAM ──────────────────────────────────────────────────────────────────────
-ros2 param get /rtabmap map_always_update      # must be True
-ros2 param get /rtabmap RGBD/LinearUpdate      # must be 0.0
-ros2 service call /rtabmap/reset std_srvs/srv/Empty
-
-# ── Joint states ──────────────────────────────────────────────────────────────
-ros2 topic echo /joint_states --no-arr --once      # from GZ bridge (BestEffort)
-ros2 topic echo /joint_states_urdf --no-arr --once # from relay (Reliable)
-
-# ── World / spawn verification ────────────────────────────────────────────────
-ros2 topic list | grep world             # should show GZ bridge topics with world_name
-ros2 topic list | grep localbot          # should show model-level topics
-
-# ── Dynamic bridge config verification ────────────────────────────────────────
-ls /tmp/ugv_*_gz_bridge.yaml             # temp file generated by sim.launch.py
-cat /tmp/ugv_*_gz_bridge.yaml            # verify world_name and robot_name are correct
-
-# ── Goal sending ──────────────────────────────────────────────────────────────
-ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
-  '{pose: {header: {frame_id: "map"}, pose: {position: {x: 0.0, y: 6.0, z: 0.0}, orientation: {w: 1.0}}}}'
-
-# ── Clean kill ────────────────────────────────────────────────────────────────
-pkill -9 -f "gz sim|ros2 launch|parameter_bridge|rtabmap|rviz2|yolo_seg|depth_relay"
 ```
 
----
+### Adding a new world
 
-## 21. How to Modify Each Module Safely
+1. Create your SDF file (no robot model inside)
+2. Set `<world name="your_world_name">` in the SDF
+3. Launch with `world:=/path/to/world.sdf world_name:=your_world_name`
 
-### Add a new world
+No code changes or rebuild needed.
 
-1. Copy `src/ugv_sim/worlds/empty_world.sdf` as your template
-2. Change `<world name="empty">` to `<world name="your_name">`
-3. Add obstacles inside the world (copy the template shown in the file)
-4. **Do NOT add the robot** — it is spawned via launch args
-5. Rebuild: `colcon build --packages-select ugv_sim`
-6. Launch: `ros2 launch ugv_bringup ugv_complete.launch.py world:=... world_name:=your_name`
+### Adding a new depth source
 
-### Modify Localbot geometry or sensors
+1. Create `src/ugv_perception/ugv_perception/my_sensor_relay_node.py`
+2. Publish to the three canonical topics (RELIABLE QoS):
+   - `/perception/depth/image_raw` (32FC1, metres)
+   - `/perception/depth/camera_info` (CameraInfo)
+   - `/perception/depth/colorized` (bgr8 TURBO)
+3. Add entry point in `src/ugv_perception/setup.py`
+4. Add a conditional `Node(...)` block in `perception.launch.py`
+5. Document the new `camera_type` value in `ugv_complete.launch.py`
 
-1. Edit `src/ugv_sim/models/localbot/model.sdf`
-2. If adding a sensor link: also add the link/joint to `src/ugv_description/urdf/sensors/`
-3. Bridge config is generated dynamically — no YAML editing needed for same-named links
-4. If changing link names: update `_make_bridge_yaml()` in `sim.launch.py`
-5. Rebuild: `colcon build --packages-select ugv_sim ugv_description`
+### Modifying Nav2 behavior
 
-### Swap the Nav2 planner
+Edit `src/ugv_bringup/config/nav2_params.yaml`. No rebuild needed.
 
-In `nav2_params.yaml` change:
+- **Speed:** `desired_linear_vel` (controller) + `max_linear_velocity` (URDF DiffDrive)
+- **Safety margin:** `inflation_radius`
+- **Stuck detection:** `movement_time_allowance` / `required_movement_radius`
+- **Override at launch:** `nav2_params_file:=/path/to/custom.yaml`
+
+### Modifying RTAB-Map
+
+Edit `src/ugv_bringup/config/rtabmap.yaml`. No rebuild needed.
+
+To keep the map across restarts, set `delete_db_on_start: false` in `localization.launch.py`.
+
+### Integrating traversability grid into Nav2
+
+Add to `nav2_params.yaml` local\_costmap → plugins:
+
 ```yaml
-planner_server:
-  planner_plugins: ["GridBased"]
-  GridBased:
-    plugin: "nav2_smac_planner::SmacPlanner2D"  # swap here
-```
-Options: `SmacPlanner2D`, `SmacPlannerHybrid`, `NavfnPlanner`, `ThetaStarPlanner`
-
-### Change SLAM algorithm
-
-Replace RTAB-Map with another SLAM by modifying `localization.launch.py`. The contract is: publish `/map` (Reliable + TransientLocal OccupancyGrid) and `map→odom` TF.
-
-### Add a new depth source
-
-1. Create relay node in `src/ugv_perception/ugv_perception/mynew_relay_node.py`
-2. Add entry_point in `src/ugv_perception/setup.py`
-3. Add `<exec_depend>` in `src/ugv_perception/package.xml`
-4. Add conditional node to `perception.launch.py` with `EqualsSubstitution(camera_type, 'mynew')`
-5. Rebuild: `colcon build --packages-select ugv_perception ugv_bringup`
-
-### Use external Nav2 config
-
-```bash
-# No rebuild needed — just pass the file path
-ros2 launch ugv_bringup ugv_complete.launch.py nav2_params_file:=/path/to/my_params.yaml
+plugins: ["obstacle_layer", "traversability_layer", "inflation_layer"]
+traversability_layer:
+  plugin: "nav2_costmap_2d::StaticLayer"
+  map_topic: /terrain/traversability_grid
+  subscribe_to_updates: true
 ```
 
-### Use external RViz config
-
-```bash
-ros2 launch ugv_bringup ugv_complete.launch.py rviz_config:=/path/to/my_config.rviz
-```
+(Also requires changing the terrain node's output frame from `base_footprint` to `odom`.)
 
 ---
 
-## 22. Known Limitations
+## License
 
-| Limitation | Impact | Workaround |
-|------------|--------|------------|
-| Front-facing camera only | No side/rear obstacle detection | Larger `inflation_radius`; lower speed |
-| SLAM at ~1 Hz | RPP needs `transform_tolerance: 1.0` | Already configured |
-| Depth Anything V3 = relative depth | No metric scale | Use `realsense` or `zed` in production |
-| Gazebo startup ~15s | Camera unavailable first 15s | Wait; expected behavior |
-| `world_name` must match world SDF `name` attribute | Sensors silent if mismatch | Bridge config shows correct expected topics in `/tmp/ugv_*_gz_bridge.yaml` |
-| Teleop GUI widget hardcodes `/model/localbot/cmd_vel` | GUI teleop breaks if `robot_name!=localbot` | Edit Teleop plugin topic in world SDF or use ROS teleop: `ros2 run teleop_twist_keyboard teleop_twist_keyboard` |
-
----
-
-## 23. Change History
-
-| Commit | Fix | Root Cause |
-|--------|-----|-----------|
-| `57e33de` | SLAM never receives depth | GZ depth topic is `depth_image` not `image` |
-| `ce3f06c` | Wrong terrain back-projection | Hardcoded `fx=616` vs actual Gazebo cam `fx≈421` |
-| `e326bfb` | RViz fixed frame wrong | `map` frame not available until SLAM builds |
-| `219b04e` | Tugbot warning light spinning | `warnign_light_joint` revolute at 10 rad/s → fixed type |
-| `219b04e` | RViz robot flickering white | Relay passed non-URDF joints → RSP "unknown joint" → TF crash |
-| `3f856dd` | `/map` never published | RTAB-Map waited for 0.1m movement → `RGBD/LinearUpdate: "0.0"` |
-| `72d669b` | All model.sdf changes ignored | World used Fuel URL, bypassing local model dir |
-| `72d669b` | Robot stops mid-navigation | `failure_tolerance: 0.3` aborted on brief TF hiccups |
-| `e002329` | **URDF↔SDF wheel mismatch** | TugBot `wheel_radius=0.195m` but URDF says 0.1m |
-| `e002329` | **Fuel/internet dependency for robot** | Created **Localbot** — zero Fuel dependency |
-| `e002329` | **Joint name mismatch** | TugBot reversed names → relay simplified to QoS-only |
-| `2370418` | **Gazebo crash on launch** | Old world downloaded 8+ Fuel models via HTTP |
-| `2370418` | **Sensors/IMU at model level** | World-level systems duplicated → sensor instability |
-| **current** | **World not modular** | Bridge hardcoded `world_demo`/`localbot` → **OpaqueFunction + dynamic YAML** |
-| **current** | **Robot baked into world SDF** | Can't use any world → **ros_gz_sim create spawner** |
-| **current** | **No spawn position control** | → **spawn_x/y/z/yaw args exposed at top level** |
-| **current** | **Nav2 config not runtime-swappable** | → **nav2_params_file arg** |
-| **current** | **No empty world template** | → **empty_world.sdf with template comments** |
+MIT License — see [LICENSE](LICENSE) for details.

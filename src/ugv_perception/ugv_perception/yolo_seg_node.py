@@ -115,6 +115,7 @@ class YoloHazardSegmentationNode(Node):
                     source=cv_image,
                     conf=self.conf_thresh,
                     device=self.device_str,
+                    half=self.enable_fp16,
                     verbose=False
                 )
 
@@ -128,19 +129,25 @@ class YoloHazardSegmentationNode(Node):
                         class_name = names.get(cls_id, str(cls_id)).lower()
                         mask_resized = cv2.resize(masks_data[i], (w, h), interpolation=cv2.INTER_NEAREST)
 
-                        # Determine if this class is a hazard or caution
-                        is_hazard = any(k in class_name for k in self.hazard_keywords) or (class_name not in {'road', 'trail', 'grass'})
-                        
-                        if is_hazard:
+                        # Classify by hazard keyword match.
+                        # The OR (class_name not in {road, trail, grass}) clause was removed:
+                        # COCO-80 has none of those classes, so every object would be lethal.
+                        # Now: keyword match → lethal (255); no match → caution (128).
+                        is_lethal = any(k in class_name for k in self.hazard_keywords)
+
+                        if is_lethal:
                             hazard_mask[mask_resized > 0.5] = 255
                             # Red overlay for lethal hazards
                             overlay[mask_resized > 0.5] = (
                                 overlay[mask_resized > 0.5] * 0.5 + np.array([0, 0, 255]) * 0.5
                             ).astype(np.uint8)
                         else:
-                            # Green overlay for traversable regions
+                            # Amber overlay for caution/unknown classes
+                            hazard_mask[mask_resized > 0.5] = np.maximum(
+                                hazard_mask[mask_resized > 0.5], 128
+                            )
                             overlay[mask_resized > 0.5] = (
-                                overlay[mask_resized > 0.5] * 0.7 + np.array([0, 255, 0]) * 0.3
+                                overlay[mask_resized > 0.5] * 0.7 + np.array([0, 165, 255]) * 0.3
                             ).astype(np.uint8)
 
                 else:

@@ -14,11 +14,17 @@ This node converts to 32FC1 in metres, re-frames to camera_link_optical,
 and publishes on /perception/depth/image_raw so the rest of the pipeline
 (SLAM, Nav2, GridMap) works identically to sim mode.
 
+Canonical depth topic contract (all camera_type sources must publish these):
+  /perception/depth/image_raw   (32FC1, metres)        — Nav2, RTAB-Map, point cloud
+  /perception/depth/camera_info (CameraInfo)           — intrinsics for point cloud
+  /perception/depth/colorized   (bgr8, TURBO colormap) — RViz RealDepth panel
+
 Configurable parameters allow adapting to different RealSense launch configs.
 """
 
 import rclpy
 import numpy as np
+import cv2
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from cv_bridge import CvBridge
@@ -34,17 +40,21 @@ class RealSenseRelayNode(Node):
         self.declare_parameter('input_info_topic',   '/camera/camera/depth/camera_info')
         self.declare_parameter('output_depth_topic', '/perception/depth/image_raw')
         self.declare_parameter('output_info_topic',  '/perception/depth/camera_info')
+        self.declare_parameter('output_color_topic', '/perception/depth/colorized')
         self.declare_parameter('output_frame_id',    'camera_link_optical')
         self.declare_parameter('min_depth_m', 0.1)
         self.declare_parameter('max_depth_m', 10.0)
+        self.declare_parameter('colorize_max_depth', 10.0)
 
-        in_depth  = self.get_parameter('input_depth_topic').value
-        in_info   = self.get_parameter('input_info_topic').value
-        out_depth = self.get_parameter('output_depth_topic').value
-        out_info  = self.get_parameter('output_info_topic').value
-        self.frame_id  = self.get_parameter('output_frame_id').value
-        self.min_depth = float(self.get_parameter('min_depth_m').value)
-        self.max_depth = float(self.get_parameter('max_depth_m').value)
+        in_depth        = self.get_parameter('input_depth_topic').value
+        in_info         = self.get_parameter('input_info_topic').value
+        out_depth       = self.get_parameter('output_depth_topic').value
+        out_info        = self.get_parameter('output_info_topic').value
+        out_color       = self.get_parameter('output_color_topic').value
+        self.frame_id   = self.get_parameter('output_frame_id').value
+        self.min_depth  = float(self.get_parameter('min_depth_m').value)
+        self.max_depth  = float(self.get_parameter('max_depth_m').value)
+        self.colorize_max = float(self.get_parameter('colorize_max_depth').value)
 
         self.bridge = CvBridge()
         self.latest_info: CameraInfo = None
@@ -60,11 +70,13 @@ class RealSenseRelayNode(Node):
 
         self.depth_pub = self.create_publisher(Image,      out_depth, pub_qos)
         self.info_pub  = self.create_publisher(CameraInfo, out_info,  pub_qos)
+        self.color_pub = self.create_publisher(Image,      out_color, pub_qos)
         self.depth_sub = self.create_subscription(Image,      in_depth, self.depth_cb, sensor_qos)
         self.info_sub  = self.create_subscription(CameraInfo, in_info,  self.info_cb,  sensor_qos)
 
         self.get_logger().info(
             f'[RealSenseRelayNode] {in_depth} (16UC1 mm) → {out_depth} (32FC1 m)'
+            f' + {out_color} (bgr8 TURBO)'
         )
 
     def depth_cb(self, msg: Image):
@@ -82,12 +94,21 @@ class RealSenseRelayNode(Node):
             out.header.frame_id = self.frame_id
             self.depth_pub.publish(out)
 
+            # Colorized TURBO output — required for RViz RealDepth panel
+            try:
+                colorized = self._colorize(depth_m)
+                color_msg = self.bridge.cv2_to_imgmsg(colorized, encoding='bgr8')
+                color_msg.header = out.header
+                self.color_pub.publish(color_msg)
+            except Exception as e:
+                self.get_logger().warn(f'Colorize failed: {e}', throttle_duration_sec=10.0)
+
             # Publish camera_info aligned to this depth stamp
             if self.latest_info is not None:
                 info_out = CameraInfo()
-                info_out.header        = out.header
-                info_out.height        = self.latest_info.height
-                info_out.width         = self.latest_info.width
+                info_out.header           = out.header
+                info_out.height           = self.latest_info.height
+                info_out.width            = self.latest_info.width
                 info_out.distortion_model = self.latest_info.distortion_model
                 info_out.d = self.latest_info.d
                 info_out.k = self.latest_info.k
@@ -96,6 +117,15 @@ class RealSenseRelayNode(Node):
                 self.info_pub.publish(info_out)
         except Exception as e:
             self.get_logger().error(f'depth_cb: {e}')
+
+    def _colorize(self, depth_m: np.ndarray) -> np.ndarray:
+        """Convert 32FC1 depth (metres) to bgr8 TURBO colormap. Black = invalid."""
+        invalid = ~np.isfinite(depth_m) | (depth_m <= 0.0)
+        clean   = np.where(invalid, 0.0, depth_m)
+        norm    = (np.clip(clean, 0.0, self.colorize_max) / self.colorize_max * 255).astype(np.uint8)
+        colored = cv2.applyColorMap(norm, cv2.COLORMAP_TURBO)  # dark blue=near, red=far
+        colored[invalid] = (0, 0, 0)
+        return colored
 
     def info_cb(self, msg: CameraInfo):
         self.latest_info = msg

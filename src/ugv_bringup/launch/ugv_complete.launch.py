@@ -28,9 +28,10 @@ from launch.substitutions import LaunchConfiguration, EqualsSubstitution
 
 
 def generate_launch_description():
-    pkg_bringup = get_package_share_directory('ugv_bringup')
-    pkg_sim     = get_package_share_directory('ugv_sim')
-    pkg_terrain = get_package_share_directory('ugv_terrain')
+    pkg_bringup     = get_package_share_directory('ugv_bringup')
+    pkg_sim         = get_package_share_directory('ugv_sim')
+    pkg_terrain     = get_package_share_directory('ugv_terrain')
+    pkg_description = get_package_share_directory('ugv_description')
 
     default_world = os.path.join(pkg_sim, 'worlds', 'ugv_test_arena.sdf')
 
@@ -129,7 +130,7 @@ def generate_launch_description():
             description=(
                 'Depth source — swappable without changing anything downstream:\n'
                 '  sim        — Gazebo real depth_camera sensor (default)\n'
-                '  monocular  — Depth Anything V3 (any RGB-only camera)\n'
+                '  monocular  — Depth Anything V2 Metric Indoor (any RGB-only camera)\n'
                 '  realsense  — Intel RealSense D435/D455 (hw mode)\n'
                 '  zed        — Stereolabs ZED 2/ZED X (hw mode, outdoor)\n'
                 'All sources publish identical /perception/depth/* topics.'
@@ -138,9 +139,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_depth_viz', default_value='false',
             description=(
-                'Run Depth Anything V3 as a RViz visualization overlay.\n'
-                'Does NOT affect navigation — purely for visual comparison.\n'
-                'Disabled by default (saves GPU compute).'
+                'Run Depth Anything V2 Metric as a side-by-side RViz AI depth overlay.\n'
+                'Does NOT affect navigation — purely for visual comparison vs. the\n'
+                'Gazebo real depth sensor. Disabled by default (costs ~2GB VRAM).'
             )
         ),
 
@@ -173,6 +174,17 @@ def generate_launch_description():
         # ══════════════════════════════════════════════════════════════════════
         # MODULES (launched in dependency order)
         # ══════════════════════════════════════════════════════════════════════
+
+        # ── 0. Robot State Publisher (hw mode only) ───────────────────────────
+        # In sim mode, RSP is started inside sim.launch.py.
+        # In hw mode, sim.launch.py is skipped, so RSP must be launched here.
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_description, 'launch', 'robot_state_publisher.launch.py')
+            ),
+            launch_arguments={'use_sim_time': use_sim_time}.items(),
+            condition=IfCondition(EqualsSubstitution(mode, 'hw'))
+        ),
 
         # ── 1. Simulation Environment (sim mode only) ─────────────────────────
         # Starts Gazebo, spawns localbot, bridges all GZ↔ROS topics.

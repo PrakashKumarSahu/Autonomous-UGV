@@ -106,7 +106,7 @@ class DepthToPointCloudNode(Node):
 
         z = sub_depth
         # Valid: finite, not zero, within sensor range [0.2m, 25m]
-        valid = (z > 0.2) & (z < 25.0) & np.isfinite(z)
+        valid = (z > 0.2) & (z < 10.0) & np.isfinite(z)
 
         x = (uu - self.cx) * z / self.fx
         y = (vv - self.cy) * z / self.fy

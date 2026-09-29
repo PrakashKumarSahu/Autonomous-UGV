@@ -96,8 +96,10 @@ class DepthEstimationNode(Node):
         # ── Publishers ───────────────────────────────────────────────────────
         self.depth_pub = self.create_publisher(Image, self.output_depth_topic, pub_qos)
         self.color_pub = self.create_publisher(Image, self.output_color_topic, pub_qos)
-        # Matching camera_info topic (replace /image_raw → /camera_info)
-        depth_info_topic = self.output_depth_topic.replace('/image_raw', '/camera_info')
+        # Matching camera_info topic — always the /camera_info sibling of the depth topic
+        # e.g. /perception/depth/image_raw → /perception/depth/camera_info
+        _depth_ns = self.output_depth_topic.rsplit('/', 1)[0]
+        depth_info_topic = _depth_ns + '/camera_info'
         self.depth_info_pub = self.create_publisher(CameraInfo, depth_info_topic, pub_qos)
         if self.publish_pointcloud:
             self.points_pub = self.create_publisher(PointCloud2, self.output_points_topic, pub_qos)
@@ -217,10 +219,14 @@ class DepthEstimationNode(Node):
                 self.get_logger().error(f'Depth inference failed: {e}', throttle_duration_sec=10.0)
 
         # ── Geometric fallback ────────────────────────────────────────────────
+        # Used only when the DA V2 Metric model fails to load.
+        # Formula: depth = (fy * camera_height) / (pixel_distance_from_horizon)
+        # camera_link_optical height above ground:
+        #   wheel_radius(0.1) + base_height/2(0.1) + mast(0.4323) + optical_z(0.0125) ≈ 0.64m
         gray      = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         y_coords  = np.arange(h, dtype=np.float32)[:, None]
         dy        = np.maximum(y_coords - h * 0.42, 1.0)
-        depth     = np.repeat((self.fy * 0.43) / dy, w, axis=1)
+        depth     = np.repeat((self.fy * 0.64) / dy, w, axis=1)
         edges     = cv2.Canny(gray, 50, 150).astype(np.float32) / 255.0
         depth    -= cv2.GaussianBlur(edges, (15, 15), 0) * 1.5
         return np.clip(depth, self.min_depth, self.max_depth).astype(np.float32)
