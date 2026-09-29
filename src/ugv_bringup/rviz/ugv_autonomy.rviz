@@ -10,7 +10,7 @@ Panels:
         - /CameraDepthCloud1
         - /RGBCamera1
       Splitter Ratio: 0.5
-    Tree Height: 197
+    Tree Height: 428
 Visualization Manager:
   Class: ""
   Displays:
@@ -93,10 +93,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        tugbot/camera_front/color:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -209,7 +205,7 @@ Visualization Manager:
       Min Color: 0; 0; 0
       Min Intensity: 0
       Name: CameraDepthCloud
-      Position Transformer: ""
+      Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.03999999910593033
@@ -339,17 +335,17 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Max Value: 10
+      Max Value: 1
       Median window: 5
       Min Value: 0
-      Name: RealDepth (Gazebo sensor / hw relay)
-      Normalize Range: true
+      Name: RealDepth  (TURBO colormap — blue=near, green=mid, red=far, black=invalid)
+      Normalize Range: false
       Topic:
         Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /perception/depth/image_raw
+        Value: /perception/depth/colorized
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
@@ -366,7 +362,7 @@ Visualization Manager:
         Value: /perception/yolo/overlay
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 10
       Median window: 5
       Min Value: 0
@@ -378,7 +374,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /perception/depth_ai/image_raw
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -425,16 +421,16 @@ Window Geometry:
     collapsed: false
   Displays:
     collapsed: false
-  Height: 720
+  Height: 1011
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001ad00000272fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d00740072007500650029010000003f000000430000001700fffffffb000000220059004f004c004f00480061007a006100720064004f007600650072006c006100790100000088000000400000001700fffffffb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000ce000000430000001700fffffffb0000001200520047004200430061006d0065007200610100000117000000410000001700fffffffb000000100044006900730070006c006100790073010000015e00000153000000cc00ffffff000001600000027200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000001ad00000395fc0200000005fb000000680041004900440065007000740068002000280044006500700074006800200041006e0079007400680069006e00670020005600330020201400200065006e00610062006c0065005f00640065007000740068005f00760069007a003a003d0074007200750065002902000003e100000084000001af00000063fb000000220059004f004c004f00480061007a006100720064004f007600650072006c00610079010000003f0000006c0000001700fffffffb00000048005200650061006c004400650070007400680020002800470061007a00650062006f002000730065006e0073006f00720020002f002000680077002000720065006c00610079002901000000b1000000710000001700fffffffb0000001200520047004200430061006d00650072006101000001280000006c0000001700fffffffb000000100044006900730070006c006100790073010000019a0000023a000000cc00ffffff000001ec0000039500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   RGBCamera:
     collapsed: false
   RealDepth (Gazebo sensor / hw relay):
     collapsed: false
-  Width: 787
-  X: 216
-  Y: 182
+  Width: 927
+  X: 993
+  Y: 32
   YOLOHazardOverlay:
     collapsed: false
