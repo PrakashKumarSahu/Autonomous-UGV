@@ -28,7 +28,7 @@ class YoloHazardSegmentationNode(Node):
         self.declare_parameter('input_image_topic', '/camera/image_raw')
         self.declare_parameter('output_mask_topic', '/perception/hazard_mask')
         self.declare_parameter('output_overlay_topic', '/perception/yolo/overlay')
-        self.declare_parameter('model_name', 'yolov8n-seg.pt')
+        self.declare_parameter('model_name', 'yolo11n-seg.pt')
         self.declare_parameter('confidence_threshold', 0.35)
         self.declare_parameter('device', 'cuda:0' if torch.cuda.is_available() else 'cpu')
         self.declare_parameter('enable_fp16', True)

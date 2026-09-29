@@ -8,8 +8,8 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    use_sim_time  = LaunchConfiguration('use_sim_time',  default='true')
-    camera_type   = LaunchConfiguration('camera_type',   default='sim')
+    use_sim_time     = LaunchConfiguration('use_sim_time',     default='true')
+    camera_type      = LaunchConfiguration('camera_type',      default='sim')
     enable_depth_viz = LaunchConfiguration('enable_depth_viz', default='false')
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -18,10 +18,11 @@ def generate_launch_description():
     # is completely unaware of the hardware difference:
     #   /perception/depth/image_raw   (32FC1, metres, frame: camera_link_optical)
     #   /perception/depth/camera_info
+    #   /perception/depth/colorized   (bgr8 TURBO — for RViz, no black image)
     # ══════════════════════════════════════════════════════════════════════════
 
     # ── camera_type:=sim ─────────────────────────────────────────────────────
-    # Bridges Gazebo's real depth_camera sensor (metric ground-truth, 0.1-10 m).
+    # Bridges Gazebo's real depth_camera sensor (metric ground-truth, 0.1–10 m).
     depth_relay_node = Node(
         package='ugv_perception',
         executable='depth_relay_node',
@@ -31,20 +32,21 @@ def generate_launch_description():
             'input_depth_topic':   '/camera/depth/image_raw',
             'input_info_topic':    '/camera/depth/camera_info',
             'output_depth_topic':  '/perception/depth/image_raw',
+            'output_color_topic':  '/perception/depth/colorized',
             'output_info_topic':   '/perception/depth/camera_info',
             'output_frame_id':     'camera_link_optical',
-            'fallback_info_topic': '/camera/camera_info',   # RGB info fallback
+            'fallback_info_topic': '/camera/camera_info',
+            'colorize_max_depth':  10.0,
         }],
         output='screen',
         condition=IfCondition(EqualsSubstitution(camera_type, 'sim'))
     )
 
     # ── camera_type:=monocular ────────────────────────────────────────────────
-    # Depth Anything V3 monocular depth estimation from any RGB camera.
-    # Use in production when only a single RGB camera is available.
-    # Note: produces relative depth (scale ambiguity); adequate for obstacle
-    # avoidance at UGV speeds. For metric accuracy, add floor-plane scale
-    # calibration or fuse with IMU via RTAB-Map visual-inertial odometry.
+    # Depth Anything V2 Metric Indoor — outputs metric depth in metres directly.
+    # Model: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf (~100MB,
+    # cached in ~/.cache/huggingface/ after first run).
+    # GPU: RTX 4050 runs at ~15 FPS. Frames are skipped when GPU is busy.
     depth_anything_node = Node(
         package='ugv_perception',
         executable='depth_node',
@@ -54,18 +56,19 @@ def generate_launch_description():
             'input_image_topic':  '/camera/image_raw',
             'camera_info_topic':  '/camera/camera_info',
             'output_depth_topic': '/perception/depth/image_raw',
+            'output_color_topic': '/perception/depth/colorized',
             'depth_frame_id':     'camera_link_optical',
-            'publish_pointcloud': False,   # point_cloud_xyz_node handles this
+            'publish_pointcloud': False,
             'min_depth':          0.2,
             'max_depth':          10.0,
+            'colorize_max_depth': 10.0,
+            'model_id':           'depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf',
         }],
         output='screen',
         condition=IfCondition(EqualsSubstitution(camera_type, 'monocular'))
     )
 
     # ── camera_type:=realsense ────────────────────────────────────────────────
-    # Intel RealSense D435/D455/D457 — true metric depth, best for indoor.
-    # Prerequisites: ros2 launch realsense2_camera rs_launch.py
     realsense_relay_node = Node(
         package='ugv_perception',
         executable='realsense_relay_node',
@@ -85,8 +88,6 @@ def generate_launch_description():
     )
 
     # ── camera_type:=zed ──────────────────────────────────────────────────────
-    # Stereolabs ZED 2 / ZED X — outdoor, long range (up to 20 m).
-    # Prerequisites: ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2
     zed_relay_node = Node(
         package='ugv_perception',
         executable='zed_relay_node',
@@ -110,41 +111,49 @@ def generate_launch_description():
     # ── Depth Image → 3D PointCloud ───────────────────────────────────────────
     # Converts /perception/depth/image_raw + /perception/depth/camera_info
     # to /perception/depth/points (PointCloud2) used by Nav2 ObstacleLayer.
-    depth_image_proc_node = Node(
-        package='depth_image_proc',
-        executable='point_cloud_xyz_node',
-        name='point_cloud_xyz_node',
-        output='screen',
-        remappings=[
-            ('image_rect',  '/perception/depth/image_raw'),
-            ('camera_info', '/perception/depth/camera_info'),
-            ('points',      '/perception/depth/points'),
-        ],
-        parameters=[{'use_sim_time': use_sim_time}]
+    # Uses our custom node (RELIABLE QoS + proper camera_info topic) rather
+    # than depth_image_proc/point_cloud_xyz_node (which had QoS mismatches).
+    depth_to_pointcloud_node = Node(
+        package='ugv_perception',
+        executable='depth_to_pointcloud_node',
+        name='depth_to_pointcloud_node',
+        parameters=[{
+            'use_sim_time':       use_sim_time,
+            'depth_topic':        '/perception/depth/image_raw',
+            'camera_info_topic':  '/perception/depth/camera_info',
+            'pointcloud_topic':   '/perception/depth/points',
+            'step':               4,
+        }],
+        output='screen'
     )
 
-    # ── YOLO Instance Segmentation ────────────────────────────────────────────
-    # YOLOv8/YOLO11 runs on /camera/image_raw (RGB from Gazebo or real camera).
-    # Publishes hazard mask fused into terrain analysis + visual overlay for RViz.
+    # ── YOLO11 Instance Segmentation ──────────────────────────────────────────
+    # YOLO11n-seg: latest ultralytics segmentation model.
+    # Model auto-downloads on first run (~7MB, cached by ultralytics).
+    # Publishes hazard mask (binary) + visual overlay (bgr8) for RViz.
     yolo_seg_node = Node(
         package='ugv_perception',
         executable='yolo_seg_node',
         name='yolo_seg_node',
         parameters=[{
-            'use_sim_time':          use_sim_time,
-            'input_image_topic':     '/camera/image_raw',
-            'output_mask_topic':     '/perception/hazard_mask',
-            'output_overlay_topic':  '/perception/yolo/overlay',  # RViz visualization
-            'model_name':            'yolov8n-seg.pt',
-            'confidence_threshold':  0.35,
+            'use_sim_time':         use_sim_time,
+            'input_image_topic':    '/camera/image_raw',
+            'output_mask_topic':    '/perception/hazard_mask',
+            'output_overlay_topic': '/perception/yolo/overlay',
+            'model_name':           'yolo11n-seg.pt',
+            'confidence_threshold': 0.35,
         }],
         output='screen'
     )
 
-    # ── Optional: Depth Anything Visualization (enable_depth_viz:=true) ───────
-    # Runs Depth Anything V3 purely for RViz visualization of AI depth estimate.
-    # Does NOT feed into navigation. Useful to compare AI depth vs real depth.
-    # Disabled by default to save GPU (enable with enable_depth_viz:=true).
+    # ── Depth Anything V2 Visualization (enable_depth_viz:=true) ─────────────
+    # Runs Depth Anything V2 Metric alongside the sim/hw depth source — purely
+    # for visual comparison in RViz. NOT used by Nav2 or SLAM.
+    # Disabled by default to save GPU memory. Enable with enable_depth_viz:=true.
+    #
+    # Publishes:
+    #   /perception/depth_ai/image_raw  (32FC1, metric metres)
+    #   /perception/depth_ai/colorized  (bgr8 TURBO — shown in RViz AIDepth panel)
     depth_viz_node = Node(
         package='ugv_perception',
         executable='depth_node',
@@ -153,11 +162,14 @@ def generate_launch_description():
             'use_sim_time':       use_sim_time,
             'input_image_topic':  '/camera/image_raw',
             'camera_info_topic':  '/camera/camera_info',
-            'output_depth_topic': '/perception/depth_ai/image_raw',   # separate topic
+            'output_depth_topic': '/perception/depth_ai/image_raw',
+            'output_color_topic': '/perception/depth_ai/colorized',
             'depth_frame_id':     'camera_link_optical',
             'publish_pointcloud': False,
             'min_depth':          0.2,
             'max_depth':          10.0,
+            'colorize_max_depth': 10.0,
+            'model_id':           'depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf',
         }],
         output='screen',
         condition=IfCondition(enable_depth_viz)
@@ -173,14 +185,18 @@ def generate_launch_description():
             description=(
                 'Depth source: '
                 '"sim" (Gazebo depth sensor) | '
-                '"monocular" (Depth Anything V3) | '
+                '"monocular" (Depth Anything V2 Metric) | '
                 '"realsense" (Intel RealSense D435/D455) | '
                 '"zed" (ZED 2/ZED X)'
             )
         ),
         DeclareLaunchArgument(
             'enable_depth_viz', default_value='false',
-            description='Run Depth Anything V3 as visual overlay (RViz only, not used by Nav2)'
+            description=(
+                'Run Depth Anything V2 Metric as AI depth overlay for RViz comparison. '
+                'Shows /perception/depth_ai/colorized alongside real depth. '
+                'Costs ~2GB VRAM on RTX 4050. Default: false.'
+            )
         ),
         # Depth sources (only ONE active at a time based on camera_type)
         depth_relay_node,
@@ -188,7 +204,8 @@ def generate_launch_description():
         realsense_relay_node,
         zed_relay_node,
         # Shared nodes (always active)
-        depth_image_proc_node,
+        depth_to_pointcloud_node,
         yolo_seg_node,
+        # Optional visualization
         depth_viz_node,
     ])

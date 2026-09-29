@@ -362,19 +362,19 @@ Visualization Manager:
         Value: /perception/yolo/overlay
       Value: true
     - Class: rviz_default_plugins/Image
-      Enabled: false
-      Max Value: 10
+      Enabled: true
+      Max Value: 1
       Median window: 5
       Min Value: 0
-      Name: AIDepth (Depth Anything V3 — enable_depth_viz:=true)
-      Normalize Range: true
+      Name: AIDepth  (Depth Anything V2 Metric — enable_depth_viz:=true)
+      Normalize Range: false
       Topic:
         Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /perception/depth_ai/image_raw
-      Value: false
+        Value: /perception/depth_ai/colorized
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
