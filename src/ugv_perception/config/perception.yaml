@@ -1,0 +1,107 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# perception.yaml — Parameters for every ugv_perception node
+# ══════════════════════════════════════════════════════════════════════════════
+# Loaded by ugv_bringup/launch/perception.launch.py (override with
+# perception_config:=/path/to/file.yaml). Top-level keys are NODE NAMES as set
+# in the launch file. Only ONE depth source runs at a time (camera_type arg).
+#
+# Canonical depth contract — every depth source publishes:
+#   /perception/depth/image_raw    32FC1 metres, RELIABLE, frame camera_link_optical
+#   /perception/depth/camera_info  CameraInfo,   RELIABLE
+#   /perception/depth/colorized    bgr8 TURBO,   RELIABLE (RViz only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Depth source: camera_type:=sim (Gazebo depth_camera) ─────────────────────
+depth_relay_node:
+  ros__parameters:
+    input_depth_topic: /camera/depth/image_raw
+    input_info_topic: /camera/depth/camera_info
+    fallback_info_topic: /camera/camera_info
+    output_depth_topic: /perception/depth/image_raw
+    output_info_topic: /perception/depth/camera_info
+    output_color_topic: /perception/depth/colorized
+    output_frame_id: camera_link_optical
+    colorize_max_depth: 10.0
+
+# ── Depth source: camera_type:=monocular (Depth Anything V2 Metric) ──────────
+depth_node:
+  ros__parameters:
+    input_image_topic: /camera/image_raw
+    camera_info_topic: /camera/camera_info
+    output_depth_topic: /perception/depth/image_raw
+    output_color_topic: /perception/depth/colorized
+    depth_frame_id: camera_link_optical
+    model_id: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
+    device: cuda:0          # falls back to cpu automatically if CUDA is missing
+    publish_pointcloud: false
+    min_depth: 0.2
+    max_depth: 10.0
+    colorize_max_depth: 10.0
+
+# ── Depth source: camera_type:=realsense (Intel D435/D455) ───────────────────
+realsense_relay_node:
+  ros__parameters:
+    input_depth_topic: /camera/camera/depth/image_rect_raw
+    input_info_topic: /camera/camera/depth/camera_info
+    output_depth_topic: /perception/depth/image_raw
+    output_info_topic: /perception/depth/camera_info
+    output_color_topic: /perception/depth/colorized
+    output_frame_id: camera_link_optical
+    min_depth_m: 0.1
+    max_depth_m: 10.0
+    colorize_max_depth: 10.0
+
+# ── Depth source: camera_type:=zed (ZED 2 / ZED X) ───────────────────────────
+zed_relay_node:
+  ros__parameters:
+    input_depth_topic: /zed/zed_node/depth/depth_registered
+    input_info_topic: /zed/zed_node/depth/camera_info
+    output_depth_topic: /perception/depth/image_raw
+    output_info_topic: /perception/depth/camera_info
+    output_color_topic: /perception/depth/colorized
+    output_frame_id: camera_link_optical
+    colorize_max_depth: 10.0
+
+# ── Optional AI depth overlay (enable_depth_viz:=true) — RViz only ───────────
+depth_viz_node:
+  ros__parameters:
+    input_image_topic: /camera/image_raw
+    camera_info_topic: /camera/camera_info
+    output_depth_topic: /perception/depth_ai/image_raw
+    output_color_topic: /perception/depth_ai/colorized
+    depth_frame_id: camera_link_optical
+    model_id: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
+    device: cuda:0
+    publish_pointcloud: false
+    min_depth: 0.2
+    max_depth: 10.0
+    colorize_max_depth: 10.0
+
+# ── Depth image → PointCloud2 (always on; feeds Nav2 + terrain) ──────────────
+depth_to_pointcloud_node:
+  ros__parameters:
+    depth_topic: /perception/depth/image_raw
+    camera_info_topic: /perception/depth/camera_info
+    pointcloud_topic: /perception/depth/points
+    step: 4                 # sample every Nth pixel (4 → ~19k pts at 640×480)
+    min_depth: 0.2
+    max_depth: 10.0
+    stamp_offset: 0.15      # s; keeps RViz/Nav2 TF lookups inside the TF buffer
+
+# ── YOLO26 instance segmentation → hazard mask (always on) ───────────────────
+yolo_seg_node:
+  ros__parameters:
+    input_image_topic: /camera/image_raw
+    output_mask_topic: /perception/hazard_mask
+    output_overlay_topic: /perception/yolo/overlay
+    model_name: yolo26n-seg.pt   # auto-downloaded by Ultralytics on first run
+    confidence_threshold: 0.35
+    device: cuda:0
+    enable_fp16: true
+    # Substring match against the model's class names (COCO-80 for yolo26n-seg).
+    # Off-road names (rock, tree, log…) only match with a custom-trained model.
+    lethal_classes: [person, car, truck, bus, motorcycle, bicycle, dog, horse,
+                     cow, sheep, bench, chair, fire hydrant, stop sign,
+                     rock, stone, boulder, tree, trunk, log, ditch, pothole, obstacle]
+    caution_classes: [potted plant, bush, shrub, vegetation, backpack, suitcase]
+    unknown_class_cost: 128      # mask value for detections matching neither list

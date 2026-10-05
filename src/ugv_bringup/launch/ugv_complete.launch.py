@@ -207,7 +207,7 @@ def generate_launch_description():
         ),
 
         # ── 2. Perception Stack ───────────────────────────────────────────────
-        # Depth source (camera_type selects one) + YOLO + point cloud.
+        # Depth source (camera_type selects one) + YOLO26 hazard segmentation + point cloud.
         # Output: /perception/depth/*, /perception/yolo/*, /perception/depth/points
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

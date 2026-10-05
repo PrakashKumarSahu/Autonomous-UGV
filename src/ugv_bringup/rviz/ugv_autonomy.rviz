@@ -127,7 +127,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /terrain/traversability_grid_updates
+        Value: ""
       Use Timestamp: false
       Value: true
 
@@ -450,7 +450,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: goal_pose
+        Value: /goal_pose
   Transformation:
     Current:
       Class: rviz_plugins_tf2/TF2

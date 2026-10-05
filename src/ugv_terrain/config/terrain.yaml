@@ -1,0 +1,17 @@
+# terrain.yaml — terrain_analysis_node parameters
+# Loaded by ugv_terrain/launch/terrain_mapping.launch.py
+# (override with terrain_config:=/path/to/file.yaml).
+terrain_analysis_node:
+  ros__parameters:
+    pointcloud_topic: /perception/depth/points
+    hazard_mask_topic: /perception/hazard_mask
+    camera_info_topic: /perception/depth/camera_info
+    output_grid_topic: /terrain/traversability_grid
+    base_frame: base_footprint      # grid is robot-centric, rolling with the robot
+    grid_resolution: 0.10           # m / cell
+    grid_size_x: 12.0               # m (robot at centre)
+    grid_size_y: 12.0               # m
+    min_range: 0.3                  # m — matches depth camera near clip
+    max_step_height: 0.22           # m — tallest step the robot can climb
+    max_slope_angle: 25.0           # deg — ground-deviation tolerance grows with distance
+    footprint_clear_radius: 0.6     # m — always marked free around the robot

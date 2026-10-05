@@ -13,6 +13,8 @@
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_image</exec_depend>
   <exec_depend>ugv_description</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -77,7 +77,7 @@
       <mass>15.0</mass>
       <!-- Solid box inertia: I = m/12 * (a² + b²) -->
       <inertia>
-        <ixx>0.270833</ixx>  <!-- 15/12*(0.4²+0.2²) = 0.2708 -->
+        <ixx>0.250000</ixx>  <!-- 15/12*(0.4²+0.2²) = 0.2500 -->
         <ixy>0</ixy><ixz>0</ixz>
         <iyy>0.508333</iyy>  <!-- 15/12*(0.6²+0.2²) = 0.5083 -->
         <iyz>0</iyz>
@@ -482,8 +482,8 @@
          /model/localbot/tf       → bridged to /tf (odom→base_footprint transform)
        DiffDrive subscribes:
          /model/localbot/cmd_vel  ← bridged from /cmd_vel (ROS) -->
-  <plugin filename="ignition-gazebo-diff-drive-system"
-          name="ignition::gazebo::systems::DiffDrive">
+  <plugin filename="gz-sim-diff-drive-system"
+          name="gz::sim::systems::DiffDrive">
     <!-- Joint names MUST match the revolute joint names above (and URDF) -->
     <left_joint>left_wheel_joint</left_joint>
     <right_joint>right_wheel_joint</right_joint>
@@ -509,8 +509,8 @@
        ONLY wheel joints are published — no unused gripper/light joints.
        The GZ bridge maps this to /joint_states (ROS), then joint_state_relay
        does QoS bridging only (no name mapping needed since names match URDF). -->
-  <plugin filename="ignition-gazebo-joint-state-publisher-system"
-          name="ignition::gazebo::systems::JointStatePublisher">
+  <plugin filename="gz-sim-joint-state-publisher-system"
+          name="gz::sim::systems::JointStatePublisher">
     <joint_name>left_wheel_joint</joint_name>
     <joint_name>right_wheel_joint</joint_name>
   </plugin>

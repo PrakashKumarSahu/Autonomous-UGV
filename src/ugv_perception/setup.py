@@ -17,24 +17,22 @@ setup(
     zip_safe=True,
     maintainer='Prakash Kumar Sahu',
     maintainer_email='prakashtech065@gmail.com',
-    description='AI Perception stack: Depth Anything monocular depth and YOLO11/YOLOv8 hazard instance segmentation',
+    description='AI perception stack: swappable depth sources (Gazebo/RealSense/ZED/Depth Anything V2) and YOLO26 hazard instance segmentation',
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            # ── Depth Sources (select ONE via camera_type:= launch arg) ──────
-            # sim:       camera_type:=sim        (Gazebo real depth camera)
-            # hw mono:   camera_type:=monocular  (Depth Anything V3)
-            # hw stereo: camera_type:=realsense  (Intel RealSense D435/D455)
-            # hw stereo: camera_type:=zed        (ZED 2 / ZED X)
+            # ── Depth sources (exactly ONE runs, selected by camera_type:=) ──
+            #   sim        → depth_relay_node      (Gazebo depth camera)
+            #   monocular  → depth_node            (Depth Anything V2 Metric)
+            #   realsense  → realsense_relay_node  (Intel RealSense D435/D455)
+            #   zed        → zed_relay_node        (ZED 2 / ZED X)
             'depth_relay_node = ugv_perception.depth_relay_node:main',
             'realsense_relay_node = ugv_perception.realsense_relay_node:main',
             'zed_relay_node = ugv_perception.zed_relay_node:main',
-            # ── Monocular Depth Estimation (Depth Anything V3) ────────────────
             'depth_node = ugv_perception.depth_node:main',
-            # ── Perception AI ─────────────────────────────────────────────────
-            'yolo_seg_node = ugv_perception.yolo_seg_node:main',
-            'hazard_mask_node = ugv_perception.hazard_mask_node:main',
+            # ── Always-on perception ─────────────────────────────────────────
             'depth_to_pointcloud_node = ugv_perception.depth_to_pointcloud_node:main',
+            'yolo_seg_node = ugv_perception.yolo_seg_node:main',
         ],
     },
 )

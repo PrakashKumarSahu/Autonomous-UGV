@@ -62,7 +62,7 @@ class DepthRelayNode(Node):
         out_color  = self.get_parameter('output_color_topic').value
         self.frame_id      = self.get_parameter('output_frame_id').value
         fallback_info      = self.get_parameter('fallback_info_topic').value
-        self.max_depth     = self.get_parameter('colorize_max_depth').value
+        self.max_depth     = float(self.get_parameter('colorize_max_depth').value)
 
         self.latest_info: CameraInfo = None
 

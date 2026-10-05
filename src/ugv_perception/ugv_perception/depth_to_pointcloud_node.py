@@ -41,11 +41,20 @@ class DepthToPointCloudNode(Node):
         # Every N-th pixel is sampled. step=4 = 1/16 of pixels → ~4800 pts at 640×480.
         # Lower = denser cloud but more CPU. Increase if Nav2 is laggy.
         self.declare_parameter('step', 4)
+        # Valid depth window (metres). Points outside are discarded.
+        self.declare_parameter('min_depth', 0.2)
+        self.declare_parameter('max_depth', 10.0)
+        # Cloud is stamped (now - stamp_offset) so TF lookups interpolate between
+        # RTAB-Map map->odom updates instead of extrapolating (see depth_cb).
+        self.declare_parameter('stamp_offset', 0.15)
 
         self.depth_topic       = self.get_parameter('depth_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value
         self.pointcloud_topic  = self.get_parameter('pointcloud_topic').value
         self.step              = int(self.get_parameter('step').value)
+        self.min_depth         = float(self.get_parameter('min_depth').value)
+        self.max_depth         = float(self.get_parameter('max_depth').value)
+        self.stamp_offset      = float(self.get_parameter('stamp_offset').value)
 
         self.bridge = CvBridge()
 
@@ -106,8 +115,8 @@ class DepthToPointCloudNode(Node):
         uu, vv = np.meshgrid(u, v)
 
         z = sub_depth
-        # Valid: finite, not zero, within sensor range [0.2m, 25m]
-        valid = (z > 0.2) & (z < 10.0) & np.isfinite(z)
+        # Valid: finite and within [min_depth, max_depth] metres (parameters).
+        valid = (z > self.min_depth) & (z < self.max_depth) & np.isfinite(z)
 
         x = (uu - self.cx) * z / self.fx
         y = (vv - self.cy) * z / self.fy
@@ -128,7 +137,7 @@ class DepthToPointCloudNode(Node):
         # so TF2 always interpolates successfully → no ExtrapolationException → no flicker.
         # Nav2 observation_persistence=0.5s so 150 ms-old data is fully valid.
         _now = self.get_clock().now()
-        header.stamp    = (_now - rclpy.duration.Duration(seconds=0.15)).to_msg()
+        header.stamp    = (_now - rclpy.duration.Duration(seconds=self.stamp_offset)).to_msg()
         header.frame_id = msg.header.frame_id if msg.header.frame_id else 'camera_link_optical'
 
         cloud_msg = pc2.create_cloud_xyz32(header, points)

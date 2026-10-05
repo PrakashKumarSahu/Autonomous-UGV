@@ -180,6 +180,10 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': use_sim_time.lower() in ('true', '1')}]
     )
 
+    # Clean up the generated bridge YAML when the launch finishes.
+    import atexit
+    atexit.register(lambda: os.path.exists(bridge_yaml_path) and os.unlink(bridge_yaml_path))
+
     return [
         bridge_node,
         TimerAction(period=3.0, actions=[spawn_node]),  # wait for Gazebo physics

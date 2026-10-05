@@ -3,7 +3,7 @@
 <package format="3">
   <name>ugv_perception</name>
   <version>1.0.0</version>
-  <description>AI Perception stack: Depth Anything monocular depth and YOLO11/YOLOv8 hazard instance segmentation</description>
+  <description>AI perception stack: swappable depth sources (Gazebo/RealSense/ZED/Depth Anything V2) and YOLO26 hazard instance segmentation</description>
   <maintainer email="prakashtech065@gmail.com">Prakash Kumar Sahu</maintainer>
   <license>Apache-2.0</license>
 

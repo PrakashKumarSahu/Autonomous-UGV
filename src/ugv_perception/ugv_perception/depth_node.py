@@ -19,7 +19,6 @@ Model: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
   GPU: RTX 4050 runs inference at ~15 FPS (frames are skipped if GPU busy)
 """
 
-import sys
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -121,7 +120,11 @@ class DepthEstimationNode(Node):
         """Load Depth Anything V2 Metric model from HuggingFace cache."""
         try:
             from transformers import pipeline as hf_pipeline
-            device_id = 0 if torch.cuda.is_available() else -1
+            # Map the `device` parameter ('cpu' | 'cuda' | 'cuda:N') to an HF device index.
+            if self.device.type == 'cuda':
+                device_id = self.device.index if self.device.index is not None else 0
+            else:
+                device_id = -1
             self.get_logger().info(f'Loading {self.model_id} (cached in ~/.cache/huggingface/)...')
             self.depth_pipe = hf_pipeline(
                 'depth-estimation',
@@ -129,7 +132,7 @@ class DepthEstimationNode(Node):
                 device=device_id
             )
             self.is_metric = True
-            self.get_logger().info(f'Depth Anything V2 Metric loaded on {"GPU" if device_id==0 else "CPU"}')
+            self.get_logger().info(f'Depth Anything V2 Metric loaded on {"GPU" if device_id >= 0 else "CPU"}')
         except Exception as e:
             self.get_logger().warn(
                 f'Could not load Depth Anything model: {e}\n'
