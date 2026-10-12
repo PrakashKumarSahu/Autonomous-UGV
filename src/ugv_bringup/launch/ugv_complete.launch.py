@@ -128,20 +128,14 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera_type', default_value='sim',
             description=(
-                'Depth source — swappable without changing anything downstream:\n'
-                '  sim        — Gazebo real depth_camera sensor (default)\n'
-                '  monocular  — Depth Anything V2 Metric Indoor (any RGB-only camera)\n'
+                'Depth source — all produce identical /perception/depth/* topics:\n'
+                '  sim        — Gazebo real depth_camera sensor (default for mode:=sim)\n'
+                '  da_v3_trt  — Depth Anything V3 TensorRT (monocular RGB → metric depth)\n'
+                '               Requires: TRT + CUDA toolkit + ONNX model.\n'
+                '               Run scripts/setup_da3_trt.sh first.\n'
                 '  realsense  — Intel RealSense D435/D455 (hw mode)\n'
                 '  zed        — Stereolabs ZED 2/ZED X (hw mode, outdoor)\n'
                 'All sources publish identical /perception/depth/* topics.'
-            )
-        ),
-        DeclareLaunchArgument(
-            'enable_depth_viz', default_value='false',
-            description=(
-                'Run Depth Anything V2 Metric as a side-by-side RViz AI depth overlay.\n'
-                'Does NOT affect navigation — purely for visual comparison vs. the\n'
-                'Gazebo real depth sensor. Disabled by default (costs ~2GB VRAM).'
             )
         ),
 
@@ -207,18 +201,19 @@ def generate_launch_description():
         ),
 
         # ── 2. Perception Stack ───────────────────────────────────────────────
-        # Depth source (camera_type selects one) + YOLO26 hazard segmentation + point cloud.
+        # Depth source (camera_type selects one) + YOLO26n-seg hazard segmentation + point cloud.
         # Output: /perception/depth/*, /perception/yolo/*, /perception/depth/points
+        # For camera_type:=da_v3_trt: perception.launch.py also starts the DA V3 TRT C++ node.
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_bringup, 'launch', 'perception.launch.py')
             ),
             launch_arguments={
-                'use_sim_time':      use_sim_time,
-                'camera_type':       camera_type,
-                'enable_depth_viz':  LaunchConfiguration('enable_depth_viz'),
+                'use_sim_time':  use_sim_time,
+                'camera_type':   camera_type,
             }.items()
         ),
+
 
         # ── 3. Terrain Traversability Mapping ─────────────────────────────────
         # 2.5D height map from depth + YOLO hazard fusion.

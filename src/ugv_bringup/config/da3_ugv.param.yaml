@@ -1,0 +1,52 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# da3_ugv.param.yaml — Depth Anything V3 TensorRT parameters for the UGV
+# ══════════════════════════════════════════════════════════════════════════════
+# Loaded by perception.launch.py when camera_type:=da_v3_trt.
+# Applies to the depth_anything_v3 C++ TRT node from:
+#   third_party/ros2-depth-anything-v3-trt/
+#
+# Prerequisites:
+#   1. CUDA toolkit + TensorRT SDK installed (see scripts/setup_da3_trt.sh)
+#   2. ONNX model downloaded and placed:
+#        third_party/ros2-depth-anything-v3-trt/depth_anything_v3/models/
+#      Download from: https://huggingface.co/TillBeemelmanns/Depth-Anything-V3-ONNX
+#   3. depth_anything_v3 package built:
+#        source scripts/setup_da3_trt.sh   # sets up TRT path
+#        colcon build --packages-select depth_anything_v3
+#   4. On first launch the TRT engine is compiled from ONNX (~2-5 min, once only)
+#
+# The onnx_path is resolved relative to the package share directory, so:
+#   install/depth_anything_v3/share/depth_anything_v3/models/DA3METRIC-SMALL.fp16.onnx
+# ══════════════════════════════════════════════════════════════════════════════
+
+depth_anything_v3:
+  ros__parameters:
+    # ── Model ─────────────────────────────────────────────────────────────
+    # Small model: ~15 FPS on RTX 4050 at FP16 (compact enough for real-time)
+    # Large model: ~8 FPS on RTX 4050 at FP16 (more accurate, heavier)
+    # Set onnx_path to the file placed in the models/ directory.
+    # If a .engine file is present it loads directly (fastest). Otherwise it
+    # compiles ONNX → TRT engine on first run and caches the .engine file.
+    onnx_path: "models/DA3METRIC-SMALL.fp16.onnx"   # relative to package share
+    precision: "fp16"                                # fp16 (recommended) or fp32
+
+    # ── Sky handling (outdoor scenes) ─────────────────────────────────────
+    sky_threshold: 0.3     # Lower = more aggressive sky detection
+    sky_depth_cap: 20.0    # Sky pixels get this depth (metres); caps Nav2 search space
+
+    # ── Point cloud (DA V3 also generates a cloud internally) ─────────────
+    # Set to a large factor to effectively disable DA V3's internal cloud.
+    # The UGV pipeline uses depth_to_pointcloud_node from the relayed depth
+    # image, which includes the 150ms stamp offset needed for TF interpolation.
+    point_cloud_downsample_factor: 100   # skip internal cloud (use depth_to_pointcloud_node)
+    colorize_point_cloud: false
+
+    # ── Debug visualization ────────────────────────────────────────────────
+    # Publishes ~/output/depth_image_debug (colourised depth) when enabled.
+    # The da3_relay_node also produces /perception/depth/colorized for RViz.
+    enable_debug: false
+    debug_colormap: "VIRIDIS"
+    debug_colormap_min_depth: 0.0
+    debug_colormap_max_depth: 20.0
+    write_colormap: false
+    debug_filepath: "/tmp/depth_anything_v3_debug/"

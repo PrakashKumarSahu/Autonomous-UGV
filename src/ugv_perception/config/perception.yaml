@@ -23,20 +23,21 @@ depth_relay_node:
     output_frame_id: camera_link_optical
     colorize_max_depth: 10.0
 
-# ── Depth source: camera_type:=monocular (Depth Anything V2 Metric) ──────────
-depth_node:
+# ── Depth source: camera_type:=da_v3_trt (Depth Anything V3 TensorRT) ────────
+# This node bridges the ika-rwth DA V3 TRT ROS 2 node output to the canonical
+# /perception/depth/* topics. The DA V3 TRT node must be launched separately
+# (via da3_ugv.launch.py or perception.launch.py with camera_type:=da_v3_trt).
+# Requires: depth_anything_v3 package built with CUDA + TensorRT installed.
+# Setup: see scripts/setup_da3_trt.sh for environment + model preparation.
+da3_relay_node:
   ros__parameters:
-    input_image_topic: /camera/image_raw
+    da3_depth_topic: /depth_anything_v3/output/depth_image
     camera_info_topic: /camera/camera_info
     output_depth_topic: /perception/depth/image_raw
+    output_info_topic: /perception/depth/camera_info
     output_color_topic: /perception/depth/colorized
-    depth_frame_id: camera_link_optical
-    model_id: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
-    device: cuda:0          # falls back to cpu automatically if CUDA is missing
-    publish_pointcloud: false
-    min_depth: 0.2
-    max_depth: 10.0
-    colorize_max_depth: 10.0
+    output_frame_id: camera_link_optical
+    colorize_max_depth: 15.0        # outdoor scenes can be deeper than 10m
 
 # ── Depth source: camera_type:=realsense (Intel D435/D455) ───────────────────
 realsense_relay_node:
@@ -48,8 +49,8 @@ realsense_relay_node:
     output_color_topic: /perception/depth/colorized
     output_frame_id: camera_link_optical
     min_depth_m: 0.1
-    max_depth_m: 10.0
-    colorize_max_depth: 10.0
+    max_depth_m: 15.0
+    colorize_max_depth: 15.0
 
 # ── Depth source: camera_type:=zed (ZED 2 / ZED X) ───────────────────────────
 zed_relay_node:
@@ -60,22 +61,7 @@ zed_relay_node:
     output_info_topic: /perception/depth/camera_info
     output_color_topic: /perception/depth/colorized
     output_frame_id: camera_link_optical
-    colorize_max_depth: 10.0
-
-# ── Optional AI depth overlay (enable_depth_viz:=true) — RViz only ───────────
-depth_viz_node:
-  ros__parameters:
-    input_image_topic: /camera/image_raw
-    camera_info_topic: /camera/camera_info
-    output_depth_topic: /perception/depth_ai/image_raw
-    output_color_topic: /perception/depth_ai/colorized
-    depth_frame_id: camera_link_optical
-    model_id: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
-    device: cuda:0
-    publish_pointcloud: false
-    min_depth: 0.2
-    max_depth: 10.0
-    colorize_max_depth: 10.0
+    colorize_max_depth: 15.0
 
 # ── Depth image → PointCloud2 (always on; feeds Nav2 + terrain) ──────────────
 depth_to_pointcloud_node:
@@ -85,7 +71,7 @@ depth_to_pointcloud_node:
     pointcloud_topic: /perception/depth/points
     step: 4                 # sample every Nth pixel (4 → ~19k pts at 640×480)
     min_depth: 0.2
-    max_depth: 10.0
+    max_depth: 15.0         # raised to 15m for outdoor DA V3 TRT scenarios
     stamp_offset: 0.15      # s; keeps RViz/Nav2 TF lookups inside the TF buffer
 
 # ── YOLO26 instance segmentation → hazard mask (always on) ───────────────────
