@@ -1,0 +1,42 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# da3_docker.param.yaml — DA V3 TRT parameters for the Docker-based deployment
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# This file is mounted INTO the Docker container at /workspace/config/da3.param.yaml
+# All paths here are container-internal paths.
+#
+# The model is mounted into /workspace/models/ inside the container.
+# See docker/da3_trt.compose.yml for the volume mapping.
+#
+# Upstream node: depth_anything_v3 (C++ TRT, ika-rwth-aachen)
+# Container image: tillbeemelmanns/ros2-depth-anything-v3:latest-dev
+# ══════════════════════════════════════════════════════════════════════════════
+
+depth_anything_v3:
+  ros__parameters:
+    # ── Model (container-internal absolute path) ───────────────────────────
+    # The node prepends get_package_share_directory("depth_anything_v3") + "/"
+    # to this path, producing:
+    #   /da3_install/depth_anything_v3/share/depth_anything_v3/models/DA3METRIC-LARGE.onnx
+    # The compose file mounts our models dir to that exact location.
+    onnx_path: "models/DA3METRIC-LARGE.onnx"
+    precision: "fp16"          # fp16 = faster inference; fp32 = higher precision
+
+    # ── Sky handling (outdoor scenes) ─────────────────────────────────────
+    sky_threshold: 0.3         # lower = more aggressive sky detection
+    sky_depth_cap: 20.0        # sky pixels → 20m depth (Nav2 far-field cap)
+
+    # ── Point cloud (internal — disabled; da3_relay_node + depth_to_pointcloud) 
+    # The relay node on the host generates the canonical /perception/depth/points
+    # via depth_to_pointcloud_node, which includes the 150ms stamp offset
+    # needed for TF interpolation. Disable the internal cloud here.
+    point_cloud_downsample_factor: 100   # effectively disabled
+    colorize_point_cloud: false
+
+    # ── Debug visualization (optional, costs ~5ms/frame) ──────────────────
+    enable_debug: false
+    debug_colormap: "VIRIDIS"
+    debug_colormap_min_depth: 0.0
+    debug_colormap_max_depth: 20.0
+    write_colormap: false
+    debug_filepath: "/tmp/depth_anything_v3_debug/"

@@ -24,10 +24,10 @@ depth_anything_v3:
     # ── Model ─────────────────────────────────────────────────────────────
     # Small model: ~15 FPS on RTX 4050 at FP16 (compact enough for real-time)
     # Large model: ~8 FPS on RTX 4050 at FP16 (more accurate, heavier)
-    # Set onnx_path to the file placed in the models/ directory.
+    # Currently only DA3METRIC-LARGE.onnx is available on HuggingFace.
     # If a .engine file is present it loads directly (fastest). Otherwise it
     # compiles ONNX → TRT engine on first run and caches the .engine file.
-    onnx_path: "models/DA3METRIC-SMALL.fp16.onnx"   # relative to package share
+    onnx_path: "models/DA3METRIC-LARGE.onnx"    # relative to package share
     precision: "fp16"                                # fp16 (recommended) or fp32
 
     # ── Sky handling (outdoor scenes) ─────────────────────────────────────

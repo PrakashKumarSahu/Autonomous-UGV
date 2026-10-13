@@ -1,0 +1,83 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# da3_trt.compose.yml — Docker Compose for Depth Anything V3 TensorRT Node
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECTURE:
+#   This uses the official dev image (tillbeemelmanns/ros2-depth-anything-v3:latest-dev)
+#   which contains TensorRT 10.13, CUDA 13, and ROS 2 Jazzy pre-installed.
+#
+#   The depth_anything_v3 C++ ROS 2 package is built once in the container using
+#   our source (third_party/ros2-depth-anything-v3-trt/) and stored in a named
+#   Docker volume (ugv_da3_build). Subsequent launches use the cached build.
+#
+# FIRST-TIME SETUP (one-time, ~5-10 minutes):
+#   bash scripts/setup_da3_docker.sh
+#
+# NORMAL USAGE (run from repo root):
+#   docker compose -f docker/da3_trt.compose.yml up         # foreground
+#   docker compose -f docker/da3_trt.compose.yml up -d      # background
+#   docker compose -f docker/da3_trt.compose.yml down        # stop
+#
+# HOW IT INTEGRATES WITH THE UGV PIPELINE:
+#   Container publishes: /depth_anything_v3/output/depth_image  (32FC1)
+#   Host da3_relay_node: subscribes to above, publishes /perception/depth/*
+#   --network host ensures transparent ROS 2 DDS communication.
+#
+# FIRST LAUNCH NOTE:
+#   TRT compiles ONNX → engine file (~2-5 min). Cached in models volume.
+#   Subsequent launches load the engine directly (< 10s startup).
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  da3_trt:
+    image: ${DA3_IMAGE:-tillbeemelmanns/ros2-depth-anything-v3:latest-dev}
+    container_name: ugv_da3_trt
+    restart: "no"
+
+    # ── GPU access ───────────────────────────────────────────────────────────
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      PATH: /usr/local/cuda-13.0/bin:/usr/bin:/usr/local/bin:/bin
+      LD_LIBRARY_PATH: /usr/local/cuda-13.0/lib64:/usr/lib/x86_64-linux-gnu
+
+      # ── ROS 2 DDS configuration (must match the host UGV launch) ─────────
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+
+    # ── Host networking: container ROS 2 topics visible on host ───────────
+    network_mode: host
+
+    # ── Volume mounts ────────────────────────────────────────────────────────
+    volumes:
+      # Pre-built depth_anything_v3 install (built by setup_da3_docker.sh)
+      - ugv_da3_build:/da3_install:ro
+      # ONNX model + cached TRT engine:
+      # The node resolves onnx_path relative to the package share directory:
+      #   get_package_share_directory("depth_anything_v3") + "/" + onnx_path
+      # = /da3_install/depth_anything_v3/share/depth_anything_v3/models/DA3METRIC-LARGE.onnx
+      # So we mount our models dir TO that exact location (read-write for engine cache).
+      - ../third_party/ros2-depth-anything-v3-trt/depth_anything_v3/models:/da3_install/depth_anything_v3/share/depth_anything_v3/models
+      # UGV-specific parameters (read-only)
+      - ./da3_docker.param.yaml:/workspace/config/da3.param.yaml:ro
+
+    # ── Launch the compiled DA V3 TRT node ───────────────────────────────────
+    # Sources the pre-built install, then launches via the package launch file.
+    # Topic remappings match what da3_relay_node.py expects on the host.
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        source /da3_install/setup.bash &&
+        ros2 launch depth_anything_v3 depth_anything_v3.launch.py
+          input_image_topic:=/camera/image_raw
+          input_camera_info_topic:=/camera/camera_info
+          output_depth_topic:=/depth_anything_v3/output/depth_image
+          output_point_cloud_topic:=/depth_anything_v3/output/point_cloud
+          params_file:=/workspace/config/da3.param.yaml
+      "
+
+# ── Named volumes ────────────────────────────────────────────────────────────
+volumes:
+  ugv_da3_build:
+    external: true   # created by scripts/setup_da3_docker.sh

@@ -200,12 +200,15 @@ source install/setup.bash
 ros2 launch ugv_bringup ugv_complete.launch.py mode:=sim
 ```
 
-**Simulation with Depth Anything V3 TRT (real GPU depth, requires TRT setup):**
+**Simulation with Depth Anything V3 TRT via Docker (recommended GPU depth mode):**
 ```bash
-# First time: set up TRT and download model (~15 min)
-bash scripts/setup_da3_trt.sh
+# First time: pull image, download model (~10-20 min depending on connection)
+bash scripts/setup_da3_docker.sh
 
-# Then launch
+# Terminal 1 — Start the DA V3 TRT container
+docker compose -f docker/da3_trt.compose.yml up
+
+# Terminal 2 — Start the UGV stack
 ros2 launch ugv_bringup ugv_complete.launch.py mode:=sim camera_type:=da_v3_trt
 ```
 
@@ -224,60 +227,106 @@ Or use the **Nav2 Goal** tool in RViz2 (2D Nav Goal button).
 
 ---
 
-## Depth Anything V3 TRT Setup (GPU Mode)
+## Depth Anything V3 TRT — Docker Deployment
 
-Depth Anything V3 TRT replaces the camera_type:=sim Gazebo depth sensor with **real-time monocular metric depth estimation** using a TensorRT-accelerated model. This enables outdoor navigation **without a depth camera** (RGB only).
+The DA V3 TRT node requires CUDA toolkit + TensorRT SDK headers to build natively.
+The **recommended approach** is the official prebuilt Docker image, which bundles TRT 10.9 + CUDA 13 + ROS 2 Jazzy + the compiled node — **no host TRT installation needed**.
 
 ### Prerequisites
-- NVIDIA GPU with CUDA 12+ drivers
-- CUDA Toolkit (`nvcc` available)
-- TensorRT SDK 10.x
+- NVIDIA GPU (any modern: GTX 1080+, RTX series)
+- NVIDIA driver 520+ (`nvidia-smi` works)
+- Docker Engine 20+
+- NVIDIA Container Toolkit (`nvidia-ctk`)
+- User in `docker` group
 
-### Setup (automated)
+### One-time setup
 ```bash
-bash scripts/setup_da3_trt.sh
+# Add user to docker group (if not already done)
+sudo usermod -aG docker $USER && newgrp docker
+
+# Install NVIDIA Container Toolkit
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+  sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update && sudo apt install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# Pull image + download model + verify GPU in container
+bash scripts/setup_da3_docker.sh
 ```
 
-This script will:
-1. Verify your GPU and CUDA installation
-2. Install TensorRT (via pip or prompt for manual SDK download)
-3. Download the DA V3 ONNX model (`DA3METRIC-SMALL.fp16.onnx`) from HuggingFace
-4. Build the `depth_anything_v3` ROS 2 C++ package
-5. Print launch instructions
+### Running
 
-### Manual Setup
 ```bash
-# 1. Install CUDA Toolkit
-sudo apt install cuda-toolkit-12-6   # match your driver version
+# Terminal 1 — DA V3 TRT inference container
+docker compose -f docker/da3_trt.compose.yml up
 
-# 2. Install TensorRT
-pip install tensorrt --break-system-packages
-# OR: download full SDK from https://developer.nvidia.com/tensorrt
-
-# 3. Download ONNX model
-mkdir -p third_party/ros2-depth-anything-v3-trt/depth_anything_v3/models/
-wget -O third_party/ros2-depth-anything-v3-trt/depth_anything_v3/models/DA3METRIC-SMALL.fp16.onnx \
-  https://huggingface.co/TillBeemelmanns/Depth-Anything-V3-ONNX/resolve/main/DA3METRIC-SMALL.fp16.onnx
-
-# 4. Build the TRT package
-colcon build --packages-select depth_anything_v3 \
-  --cmake-args -DCMAKE_BUILD_TYPE=Release
+# Terminal 2 — UGV stack (host)
 source install/setup.bash
+ros2 launch ugv_bringup ugv_complete.launch.py mode:=sim camera_type:=da_v3_trt
+```
+
+### How Docker-based DA V3 integrates
+
+```
+┌──────────────────────────────────────────────────┐
+│ Docker container (nvidia runtime, --network host)│
+│  tillbeemelmanns/ros2-depth-anything-v3:latest  │
+│                                                  │
+│  depth_anything_v3 (C++ TRT)                    │
+│  ← /camera/image_raw     (from Gazebo/camera)  │
+│  ← /camera/camera_info                          │
+│  → /depth_anything_v3/output/depth_image ─────┐ │
+└───────────────────────────────────────────────┼─┘
+          ← ROS 2 DDS (host network) →          │
+┌───────────────────────────────────────────────┼──┐
+│ Host (ROS 2 Jazzy)                            │  │
+│                                               ▼  │
+│  da3_relay_node.py (ugv_perception)              │
+│  → /perception/depth/image_raw   (RELIABLE)     │
+│  → /perception/depth/camera_info (RELIABLE)     │
+│  → /perception/depth/colorized   (RViz)         │
+│                    │                             │
+│  depth_to_pointcloud_node                        │
+│  → /perception/depth/points  → Nav2 costmap     │
+└──────────────────────────────────────────────────┘
 ```
 
 > [!IMPORTANT]
-> On the **first launch** with `camera_type:=da_v3_trt`, TensorRT compiles the ONNX model into an optimized engine file. This takes **2–5 minutes** and is cached. Subsequent launches load the engine directly.
+> On the **first launch**, TRT compiles `DA3METRIC-LARGE.onnx` into a GPU-optimised engine (~2–5 minutes). The engine is cached in the models volume and loaded directly on subsequent launches.
 
-### How it integrates
+### Docker configuration files
+
+| File | Purpose |
+|------|---------|
+| [`docker/da3_trt.compose.yml`](docker/da3_trt.compose.yml) | Container definition (GPU, network, volumes, command) |
+| [`docker/da3_docker.param.yaml`](docker/da3_docker.param.yaml) | DA V3 TRT params (mounted read-only into container) |
+| [`docker/.env`](docker/.env) | Default env vars (ROS_DOMAIN_ID, image tag) |
+| [`scripts/setup_da3_docker.sh`](scripts/setup_da3_docker.sh) | One-time setup script |
+
+### Environment variables
+
+```bash
+# Override in shell or edit docker/.env
+export ROS_DOMAIN_ID=0                    # must match host UGV launch
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export DA3_IMAGE=tillbeemelmanns/ros2-depth-anything-v3:latest-dev
+docker compose -f docker/da3_trt.compose.yml up
 ```
-/camera/image_raw ──► depth_anything_v3 (C++ TRT node)
-                           │ 32FC1 depth, FP16 inference, ~15 FPS (RTX 4050)
-                           ▼
-/depth_anything_v3/output/depth_image ──► da3_relay_node (Python bridge)
-                                               │ TURBO colorize + camera_info forward
-                                               ▼
-                        /perception/depth/image_raw  (canonical, RELIABLE)
-                        /perception/depth/camera_info (canonical, RELIABLE)
+
+### Native build (advanced — requires local TRT installation)
+
+If you prefer to build the C++ node natively (without Docker):
+```bash
+bash scripts/setup_da3_trt.sh   # installs TRT, builds node
+ros2 launch ugv_bringup ugv_complete.launch.py camera_type:=da_v3_trt
+```
+> The native build requires CUDA toolkit + TensorRT SDK 10.x headers. See `scripts/setup_da3_trt.sh` for details. The Docker approach is recommended for most users.
+
+
                         /perception/depth/colorized   (bgr8 TURBO, RViz)
                                                │
                                                ▼
