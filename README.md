@@ -21,6 +21,7 @@ An autonomous ground vehicle stack built on **ROS 2 Jazzy** and **Gazebo Harmoni
 13. [Hardware Mode](#13-hardware-mode)
 14. [Modifying the System](#14-modifying-the-system)
 15. [Troubleshooting](#15-troubleshooting)
+16. [GitHub Repository](#16-github-repository)
 
 ---
 
@@ -701,6 +702,140 @@ Use the Docker approach instead (see Section 8).
 
 ---
 
+## 16. GitHub Repository
+
+**Repository:** [https://github.com/PrakashKumarSahu/Autonomous-UGV](https://github.com/PrakashKumarSahu/Autonomous-UGV)
+**Branch:** `main`
+**Author:** Prakash Kumar Sahu &lt;jaysahu0201@gmail.com&gt;
+
+### Clone
+
+```bash
+# With submodules (required for third_party/ros2-depth-anything-v3-trt)
+git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
+
+# If you already cloned without --recurse-submodules:
+git submodule update --init --recursive
+```
+
+### Branching Conventions
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable, verified code — all working features merged here |
+| `feature/*` | In-progress feature development |
+| `fix/*` | Bug-fix branches before merging to `main` |
+
+> **Never force-push `main`.** All changes should be merged via a PR or a clean `git push origin main`.
+
+### Commit Style
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <short summary>
+
+<optional body>
+```
+
+| Type | When |
+|---|---|
+| `feat` | New feature or capability added |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `chore` | Build scripts, CI, package metadata |
+
+**Examples from this project:**
+```
+feat(depth): Docker-based DA V3 TRT integration — verified GPU inference
+fix(audit): dead URDF plugins, stale docstrings, wrong email; rewrite README
+feat(ugv): YOLO26 upgrade, perception/terrain modularization, bugfixes & README overhaul
+```
+
+### Commit History
+
+```
+58e2bed  fix(audit): dead URDF plugins, stale docstrings, wrong email; rewrite README
+a8f5545  feat(depth): Docker-based DA V3 TRT integration — verified GPU inference
+2647043  feat(depth): DA V3 TRT integration; remove DA V2; colcon restructure & README
+331f3e6  feat(ugv): YOLO26 upgrade, perception/terrain modularization, bugfixes & README overhaul
+14a6804  rviz: full panel rewrite + world: waypoints/log/stream/hill enhancements
+3d123ca  world: fix Gazebo crash — single-link models + shadows off
+```
+
+### Contributing / Local Development Workflow
+
+```bash
+# 1. Fork and clone
+git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
+cd Autonomous-UGV
+
+# 2. Configure author (required before committing)
+git config user.name "PrakashKumarSahu"
+git config user.email "jaysahu0201@gmail.com"
+
+# 3. Create a feature or fix branch
+git checkout -b fix/my-bugfix
+
+# 4. Make changes, build, verify
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+# ... test your changes ...
+
+# 5. Commit with Conventional Commits style
+git add <files>
+git commit -m "fix(scope): describe what was fixed and why"
+
+# 6. Push and open PR → main
+git push origin fix/my-bugfix
+```
+
+### Submodules
+
+| Path | Remote | Purpose |
+|---|---|---|
+| `third_party/ros2-depth-anything-v3-trt` | `github.com/ika-rwth-aachen/ros2-depth-anything-v3-trt` | DA V3 TRT C++ ROS 2 package |
+| `third_party/yolo_ros` | upstream yolo_ros | Reference (not actively used by perception nodes) |
+
+Update submodules to latest upstream:
+
+```bash
+git submodule update --remote third_party/ros2-depth-anything-v3-trt
+git add third_party/ros2-depth-anything-v3-trt
+git commit -m "chore: update DA V3 TRT submodule to latest"
+git push origin main
+```
+
+### Repository Permissions
+
+If you have write access to `https://github.com/PrakashKumarSahu/Autonomous-UGV`, you can push directly to `main`:
+
+```bash
+git push origin main
+```
+
+If you encounter a **403 Forbidden** or authentication error:
+
+```bash
+# Option 1 — GitHub CLI (recommended)
+gh auth login
+git push origin main
+
+# Option 2 — Personal Access Token
+# Create at: https://github.com/settings/tokens
+# Scope: repo (full control)
+git remote set-url origin https://<YOUR_TOKEN>@github.com/PrakashKumarSahu/Autonomous-UGV.git
+git push origin main
+
+# Option 3 — SSH key
+# Add your public key at: https://github.com/settings/keys
+git remote set-url origin git@github.com:PrakashKumarSahu/Autonomous-UGV.git
+git push origin main
+```
+
+---
+
 ## License
 
 Apache 2.0 — see individual package `package.xml` files.
@@ -708,3 +843,4 @@ Apache 2.0 — see individual package `package.xml` files.
 ## Maintainer
 
 **Prakash Kumar Sahu** — jaysahu0201@gmail.com
+GitHub: [https://github.com/PrakashKumarSahu](https://github.com/PrakashKumarSahu)
