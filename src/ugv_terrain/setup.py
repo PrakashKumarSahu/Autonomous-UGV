@@ -17,7 +17,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Prakash Kumar Sahu',
-    maintainer_email='prakashtech065@gmail.com',
+    maintainer_email='jaysahu0201@gmail.com',
     description='2.5D Multi-layer Terrain Traversability Mapping and Occupancy Grid Generator',
     license='Apache-2.0',
     entry_points={

@@ -140,36 +140,20 @@
     <xacro:caster prefix="front" x_offset="${base_length / 2.0 - 0.08}" />
     <xacro:caster prefix="rear" x_offset="${-base_length / 2.0 + 0.08}" />
 
-    <!-- Gazebo Harmonic Diff-Drive System Plugin -->
-    <gazebo>
-        <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-            <left_joint>left_wheel_joint</left_joint>
-            <right_joint>right_wheel_joint</right_joint>
-            <wheel_separation>${wheel_separation}</wheel_separation>
-            <wheel_radius>${wheel_radius}</wheel_radius>
-            <max_linear_acceleration>2.0</max_linear_acceleration>
-            <min_linear_acceleration>-2.0</min_linear_acceleration>
-            <max_angular_acceleration>3.0</max_angular_acceleration>
-            <min_angular_acceleration>-3.0</min_angular_acceleration>
-            <max_linear_velocity>1.5</max_linear_velocity>
-            <min_linear_velocity>-1.5</min_linear_velocity>
-            <max_angular_velocity>2.0</max_angular_velocity>
-            <min_angular_velocity>-2.0</min_angular_velocity>
-            <topic>/cmd_vel</topic>
-            <odom_topic>/diff_drive_controller/odom</odom_topic>
-            <tf_topic>/model/ugv/tf</tf_topic>
-            <frame_id>odom</frame_id>
-            <child_frame_id>base_footprint</child_frame_id>
-        </plugin>
-    </gazebo>
+    <!-- ══════════════════════════════════════════════════════════════════════
+         GAZEBO SIMULATION NOTE
+         ══════════════════════════════════════════════════════════════════════
+         Gazebo loads the robot from ugv_sim/models/localbot/model.sdf, NOT
+         from this URDF. Gazebo plugins (DiffDrive, JointStatePublisher, sensors)
+         are declared inside model.sdf.
 
-    <!-- Gazebo Harmonic Joint State Publisher Plugin -->
-    <gazebo>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>left_wheel_joint</joint_name>
-            <joint_name>right_wheel_joint</joint_name>
-            <topic>/joint_states</topic>
-        </plugin>
-    </gazebo>
+         This URDF is used ONLY by robot_state_publisher to:
+           1. Broadcast static TF transforms (base_footprint → base_link → camera_link → ...)
+           2. Update dynamic joint TF from /joint_states_urdf (joint_state_relay)
+
+         Do NOT add Gazebo simulation plugins here — they would be ignored since
+         Gazebo is not loading the URDF. All simulation physics, sensors, and
+         control are defined in ugv_sim/models/localbot/model.sdf.
+         ══════════════════════════════════════════════════════════════════════ -->
 
 </robot>

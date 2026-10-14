@@ -24,10 +24,10 @@ ADDITIONAL — colorized depth for clean RViz visualization:
   colormap so depth differences are immediately visible.
 
 Swappable in production — replace this node with:
-  camera_type:=monocular   → depth_node        (Depth Anything V2 Metric Indoor, any RGB camera)
-  camera_type:=realsense   → realsense_relay_node (Intel RealSense D435/D455)
-  camera_type:=zed         → zed_relay_node    (ZED 2 / ZED X)
-All produce the same output topics — the rest of the stack is unchanged.
+  camera_type:=da_v3_trt  → da3_relay_node         (Depth Anything V3 TRT monocular, Docker GPU)
+  camera_type:=realsense  → realsense_relay_node    (Intel RealSense D435/D455)
+  camera_type:=zed        → zed_relay_node          (Stereolabs ZED 2 / ZED X)
+All produce the same /perception/depth/* output topics — the rest of the stack is unchanged.
 """
 
 import numpy as np

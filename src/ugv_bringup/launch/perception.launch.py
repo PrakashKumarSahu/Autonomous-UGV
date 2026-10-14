@@ -7,8 +7,11 @@ decides WHICH nodes run. Override the config without rebuilding:
 
 Depth source (exactly one, chosen by camera_type):
     sim        → depth_relay_node      (Gazebo real depth_camera sensor)
-    da_v3_trt  → da3_relay_node        (Depth Anything V3 TensorRT — requires TRT)
-                 + depth_anything_v3   (C++ TRT node launched alongside relay)
+    da_v3_trt  → da3_relay_node        (Depth Anything V3 TRT bridge)
+                 The DA V3 TRT node runs in Docker (docker/da3_trt.compose.yml).
+                 Run setup first: scripts/setup_da3_docker.sh
+                 Then start the container: docker compose -f docker/da3_trt.compose.yml up
+                 da3_relay_node bridges the container output to /perception/depth/*
     realsense  → realsense_relay_node  (Intel RealSense D435/D455)
     zed        → zed_relay_node        (Stereolabs ZED 2 / ZED X)
 
@@ -16,8 +19,9 @@ Always on:
     depth_to_pointcloud_node  /perception/depth/image_raw → /perception/depth/points
     yolo_seg_node             /camera/image_raw → /perception/hazard_mask + overlay
 
-For da_v3_trt: see third_party/ros2-depth-anything-v3-trt and
-scripts/setup_da3_trt.sh for TRT installation and model preparation.
+For da_v3_trt: the C++ TRT node (depth_anything_v3) also has a native build path
+via scripts/setup_da3_trt.sh — used when CUDA/TRT are installed on the host.
+The Docker path is recommended for most setups.
 """
 
 import os
