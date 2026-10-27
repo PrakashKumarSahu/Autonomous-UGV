@@ -1,831 +1,997 @@
-# Autonomous UGV — ROS 2 Jazzy + Gazebo Harmonic
+<div align="center">
 
-An autonomous ground vehicle stack built on **ROS 2 Jazzy** and **Gazebo Harmonic**. It combines real-time instance segmentation (YOLO26n-seg), depth estimation (Gazebo sensor, Depth Anything V3 TRT, RealSense, or ZED), 2.5D terrain traversability mapping, visual SLAM (RTAB-Map), and autonomous navigation (Nav2 with SmacPlanner2D + Regulated Pure Pursuit).
+# 🤖 Autonomous UGV
 
----
+### ROS 2 Jazzy · Gazebo Harmonic · YOLO26n-seg · Depth Anything V3 · RTAB-Map · Nav2
 
-## Table of Contents
+[![ROS 2](https://img.shields.io/badge/ROS_2-Jazzy-blue?logo=ros&logoColor=white)](https://docs.ros.org/en/jazzy/)
+[![Gazebo](https://img.shields.io/badge/Gazebo-Harmonic-orange?logo=gazebo)](https://gazebosim.org/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
 
-1. [System Overview](#1-system-overview)
-2. [Architecture](#2-architecture)
-3. [Package Structure](#3-package-structure)
-4. [Prerequisites](#4-prerequisites)
-5. [Installation and Build](#5-installation-and-build)
-6. [Running the System](#6-running-the-system)
-7. [Depth Source Modes](#7-depth-source-modes)
-8. [Depth Anything V3 TRT — Docker Setup](#8-depth-anything-v3-trt--docker-setup)
-9. [Configuration Reference](#9-configuration-reference)
-10. [Topic Contract](#10-topic-contract)
-11. [TF Tree](#11-tf-tree)
-12. [RViz Dashboard](#12-rviz-dashboard)
-13. [Hardware Mode](#13-hardware-mode)
-14. [Modifying the System](#14-modifying-the-system)
-15. [Troubleshooting](#15-troubleshooting)
-16. [GitHub Repository](#16-github-repository)
+A production-quality autonomous ground vehicle stack for **GPS-denied outdoor navigation** using a single RGB-D camera. Combines real-time AI perception, visual SLAM, terrain traversability mapping, and reactive autonomous navigation — all running in Gazebo Harmonic simulation with a seamless path to real hardware.
+
+[**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Configuration**](#-configuration-reference) · [**Troubleshooting**](#-troubleshooting) · [**GitHub**](#-github-repository)
+
+</div>
 
 ---
 
-## 1. System Overview
+## ⚡ Quick Start
 
-The UGV is a differential-drive wheeled robot ("Localbot") that:
+> [!IMPORTANT]
+> Requires Ubuntu 24.04, ROS 2 Jazzy, and an NVIDIA GPU. See [Prerequisites](#-prerequisites) for full details.
 
-- **Perceives** its surroundings via a front-mounted RGB-D camera and YOLO26n-seg instance segmentation
-- **Maps** terrain traversability using a 2.5D elevation + semantic occupancy grid
-- **Localizes** via visual SLAM (RTAB-Map) building a 2D occupancy map in real time
-- **Navigates** autonomously to goal poses using Nav2 (SmacPlanner2D + Regulated Pure Pursuit)
-- **Simulates** in Gazebo Harmonic with a custom obstacle-course world (`ugv_test_arena.sdf`)
+```bash
+# 1. Clone (with submodules)
+git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
+cd Autonomous-UGV
 
-### Robot Specifications (Localbot)
+# 2. Install dependencies & build
+sudo apt install -y ros-jazzy-ros-gz-sim ros-jazzy-ros-gz-bridge ros-jazzy-nav2-bringup \
+  ros-jazzy-rtabmap-ros ros-jazzy-robot-state-publisher ros-jazzy-cv-bridge \
+  ros-jazzy-sensor-msgs-py ros-jazzy-tf2-tools ros-jazzy-robot-localization
+pip install "numpy==1.26.4" ultralytics torch torchvision pyyaml
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+
+# 3. Launch
+ros2 launch ugv_bringup ugv_complete.launch.py
+```
+
+After a few seconds you'll see Gazebo, RViz, and the full pipeline active. Send a navigation goal via the **"2D Nav Goal"** button in RViz.
+
+---
+
+## 📖 Table of Contents
+
+1. [What is this?](#-what-is-this)
+2. [Architecture](#-architecture)
+3. [Package Structure](#-package-structure)
+4. [Prerequisites](#-prerequisites)
+5. [Installation & Build](#-installation--build)
+6. [Running the System](#-running-the-system)
+7. [Depth Source Modes](#-depth-source-modes)
+8. [Depth Anything V3 TRT — Docker](#-depth-anything-v3-trt--docker)
+9. [Configuration Reference](#-configuration-reference)
+10. [Topic Contract](#-topic-contract)
+11. [TF Tree](#-tf-tree)
+12. [RViz Dashboard](#-rviz-dashboard)
+13. [Hardware Mode](#-hardware-mode)
+14. [Modifying the System](#-modifying-the-system)
+15. [Troubleshooting](#-troubleshooting)
+16. [GitHub Repository](#-github-repository)
+
+---
+
+## 🧠 What is this?
+
+The **Autonomous UGV** is a complete robotics software stack for a differential-drive ground vehicle ("Localbot") capable of autonomous navigation in complex indoor/outdoor environments — **without GPS**.
+
+### What it does
+
+| Capability | Technology | Description |
+|---|---|---|
+| **Perception** | YOLO26n-seg | Real-time instance segmentation → hazard mask (lethal / caution / safe) |
+| **Depth Estimation** | Gazebo sim / DA V3 TRT / RealSense / ZED | Metric depth → 3D point cloud for obstacle avoidance |
+| **SLAM** | RTAB-Map | RGB-D visual SLAM → 2D occupancy map + map→odom transform |
+| **Terrain Analysis** | Custom 2.5D grid | Elevation + semantic layers → traversability cost grid |
+| **Navigation** | Nav2 (RPP + SmacPlanner2D) | Global path planning + local reactive control |
+| **Simulation** | Gazebo Harmonic | Physics, sensors, DiffDrive — `ugv_test_arena.sdf` obstacle course |
+
+### Robot Specifications — Localbot
 
 | Property | Value |
 |---|---|
-| Chassis | 0.60 × 0.40 × 0.20 m |
-| Drive | Differential drive, 2 × 0.10 m wheels (0.45 m separation) |
-| Camera | RGB-D (640×480, 30 Hz, 80° FOV, 0.3–10 m, `camera_link_optical` frame) |
-| IMU | 50 Hz, Gaussian noise σ=0.005 rad/s |
-| Max speed | 1.5 m/s linear, 2.0 rad/s angular |
+| Chassis dimensions | 0.60 × 0.40 × 0.20 m |
+| Drive type | Differential drive |
+| Wheel radius / separation | 0.10 m / 0.45 m |
+| Max linear / angular speed | 1.5 m/s / 2.0 rad/s |
+| Camera | RGB-D · 640×480 · 30 Hz · 80° FOV · 0.3–10 m range |
+| IMU | 50 Hz · σ = 0.005 rad/s |
 
 ---
 
-## 2. Architecture
+## 🏗️ Architecture
+
+### System Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  ugv_complete.launch.py — Single entry point                        │
-│                                                                      │
-│  ┌─────────────┐  ┌──────────────────────────────────────────────┐  │
-│  │  ugv_sim    │  │  ugv_perception                              │  │
-│  │  (sim mode) │  │                                              │  │
-│  │  Gazebo     │  │  [ONE depth source, camera_type arg]         │  │
-│  │  Harmonic   │  │  sim        → depth_relay_node               │  │
-│  │  localbot   │  │  da_v3_trt  → da3_relay_node (+ Docker)     │  │
-│  │  model.sdf  │  │  realsense  → realsense_relay_node           │  │
-│  │  world SDF  │  │  zed        → zed_relay_node                 │  │
-│  │             │  │                                              │  │
-│  │  ros_gz     │  │  [Always on]                                 │  │
-│  │  bridge     │  │  depth_to_pointcloud_node                    │  │
-│  │             │  │  yolo_seg_node (YOLO26n-seg)                 │  │
-│  └──────┬──────┘  └───────────────────────┬──────────────────────┘  │
-│         │                                  │                          │
-│  /camera/image_raw                 /perception/depth/*               │
-│  /camera/depth/*                   /perception/depth/points          │
-│  /odometry/filtered                /perception/hazard_mask           │
-│  /joint_states → relay             /perception/yolo/overlay          │
-│  /tf  /clock                                │                         │
-│         │                                  │                          │
-│  ┌──────▼──────────────────────────────────▼──────────────────────┐  │
-│  │  ugv_terrain                                                   │  │
-│  │  terrain_analysis_node                                         │  │
-│  │  → /terrain/traversability_grid (OccupancyGrid, base_frame)   │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │  ugv_bringup — localization.launch.py                          │ │
-│  │  rgbd_sync      /camera/image_raw + /perception/depth/*        │ │
-│  │                 → /rtabmap/rgbd_image                          │ │
-│  │  rtabmap         RGBDImage + /odometry/filtered                │ │
-│  │                 → /map (OccupancyGrid) + map→odom TF           │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │  ugv_bringup — navigation.launch.py (Nav2)                     │ │
-│  │  controller_server   (Regulated Pure Pursuit, 20 Hz)           │ │
-│  │  planner_server      (SmacPlanner2D)                           │ │
-│  │  behavior_server     (Spin / BackUp / Wait)                    │ │
-│  │  bt_navigator        (NavigateToPose / NavigateThroughPoses)   │ │
-│  │  lifecycle_manager                                             │ │
-│  │  Local costmap:  /perception/depth/points → ObstacleLayer      │ │
-│  │  Global costmap: /map → StaticLayer                            │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-│  ┌──────────────────────────┐                                        │
-│  │  RViz2 (optional)        │                                        │
-│  │  ugv_autonomy.rviz       │                                        │
-│  └──────────────────────────┘                                        │
-└─────────────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ros2 launch ugv_bringup ugv_complete.launch.py                          ║
+╠═══════════════════════════╦══════════════════════════════════════════════╣
+║  SIMULATION (ugv_sim)     ║  PERCEPTION (ugv_perception)                 ║
+║  ─────────────────────    ║  ────────────────────────────────────────    ║
+║  Gazebo Harmonic          ║  ┌─ camera_type arg (pick ONE) ──────────┐   ║
+║  └─ localbot/model.sdf   ║  │  sim        → depth_relay_node        │   ║
+║       DiffDrive plugin    ║  │  da_v3_trt  → da3_relay_node + Docker │   ║
+║       RGB-D camera        ║  │  realsense  → realsense_relay_node    │   ║
+║       IMU                 ║  │  zed        → zed_relay_node          │   ║
+║  ros_gz_bridge            ║  └────────────────────────────────────────┘   ║
+║       /camera/*           ║  ┌─ always on ──────────────────────────┐   ║
+║       /odometry/filtered  ║  │  depth_to_pointcloud_node            │   ║
+║       /joint_states       ║  │  yolo_seg_node (YOLO26n-seg)         │   ║
+║       /tf  /clock         ║  └────────────────────────────────────────┘   ║
+╠═══════════════════════════╩════════════╦═════════════════════════════════╣
+║  TERRAIN (ugv_terrain)                 ║  Outputs                         ║
+║  ──────────────────────                ║  /perception/depth/image_raw     ║
+║  terrain_analysis_node                 ║  /perception/depth/points        ║
+║  depth points + hazard mask            ║  /perception/hazard_mask         ║
+║  → /terrain/traversability_grid        ║  /terrain/traversability_grid    ║
+╠════════════════════════════════════════╩═════════════════════════════════╣
+║  LOCALIZATION (ugv_bringup/localization.launch.py)                        ║
+║  rgbd_sync → /rtabmap/rgbd_image                                          ║
+║  rtabmap   → /map (OccupancyGrid) + map→odom TF at ~1 Hz                  ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  NAVIGATION (ugv_bringup/navigation.launch.py)  — Nav2                    ║
+║  bt_navigator → planner_server (SmacPlanner2D) → /plan                    ║
+║             → controller_server (RPP 20 Hz)    → /cmd_vel                 ║
+║  Local costmap : ObstacleLayer ← /perception/depth/points                 ║
+║  Global costmap: StaticLayer   ← /map                                     ║
+║  Recovery: behavior_server (Spin → BackUp → Wait)                         ║
+╚══════════════════════════════════════════════════════════════════════════╝
+```
+
+### DA V3 TRT Docker Integration
+
+```
+HOST (ROS 2 Jazzy)                         DOCKER CONTAINER
+────────────────────────────────    ───────────────────────────────────────
+da3_relay_node                     tillbeemelmanns/ros2-depth-anything-v3
+  ← /depth_anything_v3/output/  ◄── DDS FastDDS (--network host) ──►  depth_anything_v3_main
+       depth_image (32FC1)           ← /camera/image_raw
+  → /perception/depth/*              ← /camera/camera_info
+                                     → /depth_anything_v3/output/depth_image
+depth_to_pointcloud_node
+  → /perception/depth/points
 ```
 
 ---
 
-## 3. Package Structure
+## 📦 Package Structure
 
 ```
 Autonomous-UGV/
 ├── src/
-│   ├── ugv_bringup/          # Top-level launch + all configuration files
+│   ├── ugv_bringup/              # 🔧 Top-level orchestrator — launch + all configs
 │   │   ├── launch/
-│   │   │   ├── ugv_complete.launch.py   # ← Single system entry point
-│   │   │   ├── perception.launch.py     # Depth source + YOLO + point cloud
-│   │   │   ├── localization.launch.py   # RTAB-Map SLAM + EKF (hw)
-│   │   │   ├── navigation.launch.py     # Nav2 stack
-│   │   │   └── rviz.launch.py           # RViz2 dashboard
+│   │   │   ├── ugv_complete.launch.py   ← SINGLE ENTRY POINT
+│   │   │   ├── perception.launch.py     # Depth source selector + YOLO + point cloud
+│   │   │   ├── localization.launch.py   # RTAB-Map SLAM + EKF (hw only)
+│   │   │   ├── navigation.launch.py     # Full Nav2 stack
+│   │   │   └── rviz.launch.py
 │   │   ├── config/
-│   │   │   ├── nav2_params.yaml         # Nav2: RPP, SmacPlanner, costmaps
-│   │   │   ├── rtabmap.yaml             # RTAB-Map SLAM parameters
-│   │   │   ├── ekf.yaml                 # EKF sensor fusion (hw mode only)
-│   │   │   └── da3_ugv.param.yaml       # DA V3 TRT node parameters
-│   │   └── rviz/
-│   │       └── ugv_autonomy.rviz        # RViz panel layout
+│   │   │   ├── nav2_params.yaml         # ← All Nav2 tuning lives here
+│   │   │   ├── rtabmap.yaml             # ← All SLAM tuning lives here
+│   │   │   ├── ekf.yaml                 # EKF (hardware mode)
+│   │   │   └── da3_ugv.param.yaml       # DA V3 TRT node params
+│   │   └── rviz/ugv_autonomy.rviz
 │   │
-│   ├── ugv_description/      # Robot URDF model (for robot_state_publisher / TF only)
-│   │   ├── urdf/
-│   │   │   ├── ugv.urdf.xacro           # Root: includes base + sensors
-│   │   │   ├── ugv_base.urdf.xacro      # Chassis, wheels, casters (joints + kinematics)
-│   │   │   └── sensors/
-│   │   │       ├── camera.urdf.xacro    # camera_link + camera_link_optical frames
-│   │   │       └── imu.urdf.xacro       # imu_link frame
-│   │   └── launch/
-│   │       └── robot_state_publisher.launch.py
+│   ├── ugv_description/          # 🤖 URDF — kinematics + TF only (NOT loaded by Gazebo)
+│   │   └── urdf/
+│   │       ├── ugv.urdf.xacro
+│   │       ├── ugv_base.urdf.xacro      # Chassis, wheels, casters
+│   │       └── sensors/
+│   │           ├── camera.urdf.xacro    # camera_link + camera_link_optical
+│   │           └── imu.urdf.xacro
 │   │
-│   ├── ugv_perception/       # AI perception nodes (Python)
+│   ├── ugv_perception/           # 👁️ AI perception nodes (Python)
 │   │   ├── ugv_perception/
-│   │   │   ├── depth_relay_node.py      # camera_type:=sim — Gazebo depth bridge
-│   │   │   ├── da3_relay_node.py        # camera_type:=da_v3_trt — DA V3 TRT bridge
-│   │   │   ├── realsense_relay_node.py  # camera_type:=realsense — RealSense bridge
-│   │   │   ├── zed_relay_node.py        # camera_type:=zed — ZED bridge
-│   │   │   ├── depth_to_pointcloud_node.py  # 32FC1 depth → PointCloud2
-│   │   │   └── yolo_seg_node.py         # YOLO26n-seg hazard instance segmentation
-│   │   └── config/
-│   │       └── perception.yaml          # Parameters for all perception nodes
+│   │   │   ├── depth_relay_node.py      # sim — Gazebo depth bridge
+│   │   │   ├── da3_relay_node.py        # da_v3_trt — DA V3 TRT bridge
+│   │   │   ├── realsense_relay_node.py  # realsense — 16UC1 mm → 32FC1 m
+│   │   │   ├── zed_relay_node.py        # zed — frame correction + colorize
+│   │   │   ├── depth_to_pointcloud_node.py  # 32FC1 → PointCloud2
+│   │   │   └── yolo_seg_node.py         # YOLO26n-seg → hazard mask
+│   │   └── config/perception.yaml
 │   │
-│   ├── ugv_terrain/          # Terrain traversability mapping (Python)
-│   │   ├── ugv_terrain/
-│   │   │   └── terrain_analysis_node.py # 2.5D OccupancyGrid from point cloud + YOLO
-│   │   ├── config/
-│   │   │   └── terrain.yaml
-│   │   └── launch/
-│   │       └── terrain_mapping.launch.py
+│   ├── ugv_terrain/              # 🗺️ 2.5D traversability mapping (Python)
+│   │   ├── ugv_terrain/terrain_analysis_node.py
+│   │   └── config/terrain.yaml
 │   │
-│   ├── ugv_sim/              # Gazebo simulation (C++ package, install-only)
-│   │   ├── launch/
-│   │   │   └── sim.launch.py            # Gazebo + RSP + bridge + spawn
-│   │   ├── models/
-│   │   │   └── localbot/
-│   │   │       ├── model.config
-│   │   │       └── model.sdf            # ← Actual robot loaded by Gazebo
+│   ├── ugv_sim/                  # 🌍 Gazebo simulation
+│   │   ├── launch/sim.launch.py         # Gazebo + RSP + bridge (dynamic YAML) + spawn
+│   │   ├── models/localbot/model.sdf    # ← Actual robot Gazebo loads (DiffDrive here)
 │   │   ├── worlds/
-│   │   │   ├── ugv_test_arena.sdf       # Default: obstacle course
-│   │   │   └── empty_world.sdf          # Empty flat ground
-│   │   ├── scripts/
-│   │   │   └── joint_state_relay.py     # QoS bridge: BestEffort → Reliable
-│   │   └── config/
-│   │       └── gazebo_bridge.yaml       # Reference (bridge is generated dynamically)
+│   │   │   ├── ugv_test_arena.sdf       # Default obstacle course
+│   │   │   └── empty_world.sdf
+│   │   └── scripts/joint_state_relay.py # QoS bridge: BestEffort→Reliable
 │   │
-│   └── ugv_control/          # ros2_control scaffolding (NOT active in default sim mode)
-│       ├── config/
-│       │   └── diff_drive_controller.yaml   # For hw mode with ros2_control
-│       └── launch/
-│           └── control.launch.py            # For hw mode with ros2_control
+│   └── ugv_control/              # ⚙️ ros2_control scaffold (NOT active in sim — future hw)
+│       ├── config/diff_drive_controller.yaml
+│       └── launch/control.launch.py
 │
-├── docker/                   # Docker-based DA V3 TRT integration
-│   ├── da3_trt.compose.yml   # Main compose file for DA V3 TRT container
-│   ├── da3_docker.param.yaml # DA V3 TRT parameters (mounted into container)
-│   ├── .env                  # Default env vars (ROS_DOMAIN_ID, image tag)
-│   └── README.md             # Docker setup guide
+├── docker/                       # 🐳 Depth Anything V3 TRT container
+│   ├── da3_trt.compose.yml       # Docker Compose — nvidia runtime, host network
+│   ├── da3_docker.param.yaml     # Node params (mounted read-only)
+│   ├── .env                      # ROS_DOMAIN_ID, RMW_IMPLEMENTATION defaults
+│   └── README.md
 │
 ├── third_party/
-│   ├── ros2-depth-anything-v3-trt/   # DA V3 TRT C++ ROS 2 package (submodule)
-│   │   └── depth_anything_v3/        # Colcon-buildable package
-│   └── yolo_ros/                     # (reference, not used by perception nodes)
+│   ├── ros2-depth-anything-v3-trt/  # DA V3 C++ ROS 2 package (git submodule)
+│   └── yolo_ros/                    # Reference only (not used by perception nodes)
 │
 └── scripts/
-    ├── setup_da3_docker.sh   # One-time DA V3 Docker setup
-    └── setup_da3_trt.sh      # Native host TRT build (advanced)
+    ├── setup_da3_docker.sh       # ← Run this once to set up DA V3 Docker
+    └── setup_da3_trt.sh          # Native host TRT build (advanced)
 ```
 
-> **Note on `ugv_control`:** The default simulation uses Gazebo's built-in DiffDrive plugin (in `localbot/model.sdf`), not `ros2_control`. `ugv_control` is scaffolding for future hardware mode with `ros2_control`-based motor drivers. It is not launched by `ugv_complete.launch.py`.
+> [!NOTE]
+> **Why does `ugv_description` not have Gazebo plugins?**
+> Gazebo loads `localbot/model.sdf` directly — not the URDF. The URDF is used **only** by `robot_state_publisher` to broadcast TF transforms. All simulation physics, sensors, and DiffDrive are declared inside `model.sdf`.
+
+> [!NOTE]
+> **Why is `ugv_control` not launched?**
+> The simulation uses Gazebo's native DiffDrive plugin. `ugv_control` is scaffolding for future hardware deployments using `ros2_control`-based motor drivers.
 
 ---
 
-## 4. Prerequisites
+## 💻 Prerequisites
 
-### System Requirements
+### Hardware Requirements
 
-| Requirement | Version |
-|---|---|
-| OS | Ubuntu 24.04 LTS |
-| ROS 2 | Jazzy Jalisco |
-| Gazebo | Harmonic (via `ros-jazzy-ros-gz-*`) |
-| Python | 3.12 |
-| GPU | NVIDIA (CUDA 12+) — required for YOLO26 GPU inference |
+| Component | Minimum | Recommended |
+|---|---|---|
+| GPU | NVIDIA GTX 1060 (6 GB VRAM) | NVIDIA RTX 4050+ (8 GB VRAM) |
+| RAM | 8 GB | 16 GB |
+| Disk | 30 GB free | 60 GB (DA V3 Docker image = 17 GB) |
+| OS | Ubuntu 24.04 LTS | Ubuntu 24.04 LTS |
+| NVIDIA Driver | 520+ | 595+ |
+
+### Software Requirements
+
+| Software | Version | Notes |
+|---|---|---|
+| ROS 2 | Jazzy Jalisco | [Installation guide](https://docs.ros.org/en/jazzy/Installation.html) |
+| Gazebo | Harmonic | Installed via `ros-jazzy-ros-gz-*` |
+| Python | 3.12 | Ships with Ubuntu 24.04 |
+| CUDA | 12.0+ | Required for YOLO GPU inference |
+| Docker | 24.0+ | Required only for DA V3 TRT mode |
 
 ### ROS 2 Packages
 
 ```bash
 sudo apt install -y \
-  ros-jazzy-ros-gz-sim ros-jazzy-ros-gz-bridge ros-jazzy-ros-gz-image \
-  ros-jazzy-nav2-bringup ros-jazzy-nav2-smac-planner \
+  ros-jazzy-ros-gz-sim \
+  ros-jazzy-ros-gz-bridge \
+  ros-jazzy-ros-gz-image \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-nav2-smac-planner \
   ros-jazzy-nav2-regulated-pure-pursuit-controller \
   ros-jazzy-rtabmap-ros \
-  ros-jazzy-robot-state-publisher ros-jazzy-joint-state-publisher \
+  ros-jazzy-robot-state-publisher \
+  ros-jazzy-joint-state-publisher \
   ros-jazzy-robot-localization \
-  ros-jazzy-tf2-ros ros-jazzy-tf2-tools \
+  ros-jazzy-tf2-ros \
+  ros-jazzy-tf2-tools \
   ros-jazzy-sensor-msgs-py \
-  ros-jazzy-cv-bridge ros-jazzy-image-transport
+  ros-jazzy-cv-bridge \
+  ros-jazzy-image-transport
 ```
 
 ### Python Dependencies
 
 ```bash
-# Core
-pip install "numpy==1.26.4"   # MUST be 1.x — ROS Jazzy cv_bridge compiled against numpy 1.x
-
-# YOLO26n-seg
-pip install ultralytics torch torchvision
-
-# Simulation
-pip install pyyaml
+pip install "numpy==1.26.4" ultralytics torch torchvision pyyaml
 ```
 
-> **Important:** Do not upgrade numpy to 2.x. `cv_bridge` will crash with: `TypeError: bytes expected, not memoryview`.
+> [!WARNING]
+> **Do NOT install numpy 2.x.** ROS 2 Jazzy's `cv_bridge` was compiled against numpy 1.x. Upgrading will cause: `TypeError: bytes expected, not memoryview` — crashing all perception nodes.
 
 ---
 
-## 5. Installation and Build
+## 🔧 Installation & Build
+
+### Step 1 — Clone the repository
 
 ```bash
-# Clone with submodules
+# --recurse-submodules is required for third_party/ros2-depth-anything-v3-trt
 git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
 cd Autonomous-UGV
+```
 
-# Source ROS 2
+> [!TIP]
+> If you forgot `--recurse-submodules`, run: `git submodule update --init --recursive`
+
+### Step 2 — Install dependencies
+
+```bash
+# ROS 2 packages (see Prerequisites section above for full list)
+sudo apt install -y ros-jazzy-ros-gz-sim ros-jazzy-nav2-bringup ros-jazzy-rtabmap-ros \
+  ros-jazzy-robot-state-publisher ros-jazzy-cv-bridge ros-jazzy-sensor-msgs-py \
+  ros-jazzy-tf2-tools ros-jazzy-robot-localization ros-jazzy-ros-gz-bridge \
+  ros-jazzy-ros-gz-image ros-jazzy-nav2-smac-planner \
+  ros-jazzy-nav2-regulated-pure-pursuit-controller ros-jazzy-joint-state-publisher \
+  ros-jazzy-tf2-ros ros-jazzy-image-transport
+
+# Python packages
+pip install "numpy==1.26.4" ultralytics torch torchvision pyyaml
+```
+
+### Step 3 — Build
+
+```bash
 source /opt/ros/jazzy/setup.bash
-
-# Build
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 ```
 
-> **First YOLO run:** `yolo26n-seg.pt` (~6.4 MB) is downloaded automatically by Ultralytics on first launch. Subsequent runs use the cache. Pre-download with: `python3 -c "from ultralytics import YOLO; YOLO('yolo26n-seg.pt')"`
+> [!NOTE]
+> You will see a CMake warning: `TensorRT not found — depth_anything_v3 will NOT be built.`  
+> This is **expected** unless you're using DA V3 TRT mode. The rest of the system builds normally.
 
-> **Third-party depth package:** `third_party/ros2-depth-anything-v3-trt/` contains the DA V3 TRT C++ node. It is colcon-discoverable but skips gracefully without TensorRT installed. To use it, see [Section 8](#8-depth-anything-v3-trt--docker-setup).
+### Step 4 — Pre-download YOLO model (optional but recommended)
+
+```bash
+python3 -c "from ultralytics import YOLO; YOLO('yolo26n-seg.pt')"
+```
+
+`yolo26n-seg.pt` (~6.4 MB) downloads automatically on first launch. This pre-downloads it so the first launch isn't delayed.
 
 ---
 
-## 6. Running the System
+## 🚀 Running the System
 
-### Simulation Mode (default)
+### Default: Simulation Mode
 
 ```bash
 source install/setup.bash
-
-# Full system — Gazebo + all perception + SLAM + Nav2 + RViz
 ros2 launch ugv_bringup ugv_complete.launch.py
-
-# With a custom world
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  world:=/path/to/my_world.sdf \
-  world_name:=my_world \
-  spawn_x:=0.0 spawn_y:=0.0 spawn_yaw:=0.0
 ```
 
-### Launch Arguments
+This starts everything: **Gazebo** → **perception pipeline** → **RTAB-Map SLAM** → **Nav2** → **RViz**.
 
-| Argument | Default | Description |
-|---|---|---|
-| `mode` | `sim` | `sim` (Gazebo) or `hw` (real robot) |
-| `use_sim_time` | `true` | Use Gazebo `/clock` for all nodes |
-| `camera_type` | `sim` | Depth source: `sim` / `da_v3_trt` / `realsense` / `zed` |
-| `world` | `ugv_test_arena.sdf` | Path to Gazebo SDF world file |
-| `world_name` | `world_demo` | World name attribute in SDF (must match `<world name="...">`) |
-| `robot_name` | `localbot` | Robot entity name in Gazebo |
-| `spawn_x/y/z` | `0.0 / -6.5 / 0.01` | Robot spawn position (metres) |
-| `spawn_yaw` | `1.5708` | Robot spawn yaw (radians): 1.5708=north, 0=east |
-| `enable_rtabmap` | `true` | Enable RTAB-Map SLAM |
-| `enable_rviz` | `true` | Launch RViz2 dashboard |
-| `nav2_params_file` | `config/nav2_params.yaml` | Override Nav2 config without rebuilding |
+Wait for this message before sending goals:
+```
+[lifecycle_manager_navigation] Lifecycle manager navigation is active
+```
 
 ### Send a Navigation Goal
 
 ```bash
-# After launch: wait for "Lifecycle manager navigation is active" in terminal, then:
-# Option 1 — RViz2: click "2D Nav Goal" button and click on the map
-# Option 2 — CLI:
+# Option A — RViz2 (recommended):  click "2D Nav Goal" and click a point on the map
+
+# Option B — CLI:
 ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
   "{pose: {header: {frame_id: map}, pose: {position: {x: 3.0, y: 2.0, z: 0.0}, orientation: {w: 1.0}}}}"
 ```
 
+### Common Launch Variants
+
+```bash
+# Custom world
+ros2 launch ugv_bringup ugv_complete.launch.py \
+  world:=$(pwd)/src/ugv_sim/worlds/empty_world.sdf \
+  world_name:=empty
+
+# Custom spawn pose
+ros2 launch ugv_bringup ugv_complete.launch.py \
+  spawn_x:=1.0 spawn_y:=0.0 spawn_yaw:=0.0
+
+# DA V3 TRT depth (after Docker setup — see Section 8)
+ros2 launch ugv_bringup ugv_complete.launch.py camera_type:=da_v3_trt
+
+# Override Nav2 params without rebuilding
+ros2 launch ugv_bringup ugv_complete.launch.py \
+  nav2_params_file:=/path/to/my_nav2_params.yaml
+
+# No RViz (headless)
+ros2 launch ugv_bringup ugv_complete.launch.py enable_rviz:=false
+```
+
+### Launch Arguments Reference
+
+| Argument | Default | Options / Description |
+|---|---|---|
+| `mode` | `sim` | `sim` — Gazebo simulation · `hw` — real robot |
+| `use_sim_time` | `true` | `true` in sim, `false` on hardware |
+| `camera_type` | `sim` | `sim` · `da_v3_trt` · `realsense` · `zed` |
+| `world` | `ugv_test_arena.sdf` | Absolute path to any Gazebo SDF world |
+| `world_name` | `world_demo` | Must match `<world name="...">` inside the SDF |
+| `robot_name` | `localbot` | Gazebo entity name |
+| `spawn_x` | `0.0` | Spawn X position (m) |
+| `spawn_y` | `-6.5` | Spawn Y position (m) |
+| `spawn_z` | `0.01` | Spawn Z position (m) |
+| `spawn_yaw` | `1.5708` | Spawn yaw (rad) — π/2 = facing north |
+| `enable_rtabmap` | `true` | Set `false` to skip SLAM (use a pre-built map) |
+| `enable_rviz` | `true` | Set `false` for headless operation |
+| `nav2_params_file` | `config/nav2_params.yaml` | Override Nav2 config path |
+
 ---
 
-## 7. Depth Source Modes
+## 🔭 Depth Source Modes
 
-All four depth sources produce an identical output contract. Only **one** source runs at a time, selected by the `camera_type` launch argument:
+The depth pipeline uses a **swappable relay architecture**: exactly one relay node runs at a time (selected by `camera_type`), and all four produce the same canonical output topics. The rest of the stack (SLAM, Nav2, terrain) never changes.
 
-### Canonical Output Topics
+### Depth Source Comparison
 
-| Topic | Type | QoS | Description |
+| `camera_type` | Hardware Required | Setup Complexity | Accuracy | Use Case |
+|---|---|---|---|---|
+| `sim` | None (Gazebo) | ⭐ None | Ground truth | Development & testing |
+| `da_v3_trt` | Any RGB camera + NVIDIA GPU | ⭐⭐⭐ Docker | Very high (monocular) | Outdoor with single camera |
+| `realsense` | Intel RealSense D435/D455 | ⭐⭐ Driver install | High (structured light) | Indoor/outdoor, \<5 m |
+| `zed` | Stereolabs ZED 2 / ZED X | ⭐⭐⭐ SDK install | High (stereo) | Outdoor, \<20 m |
+
+### Canonical Output Contract (all modes publish these)
+
+| Topic | Type | QoS | Consumers |
 |---|---|---|---|
-| `/perception/depth/image_raw` | `sensor_msgs/Image` (32FC1) | RELIABLE | Metric depth in metres |
-| `/perception/depth/camera_info` | `sensor_msgs/CameraInfo` | RELIABLE | Camera intrinsics |
-| `/perception/depth/colorized` | `sensor_msgs/Image` (bgr8) | RELIABLE | TURBO colormap (RViz) |
-| `/perception/depth/points` | `sensor_msgs/PointCloud2` | RELIABLE | 3D point cloud → Nav2 |
+| `/perception/depth/image_raw` | `Image` (32FC1, metres) | RELIABLE | RTAB-Map, depth_to_pointcloud |
+| `/perception/depth/camera_info` | `CameraInfo` | RELIABLE | RTAB-Map, depth_to_pointcloud |
+| `/perception/depth/colorized` | `Image` (bgr8, TURBO) | RELIABLE | RViz2 visualization |
+| `/perception/depth/points` | `PointCloud2` | RELIABLE | Nav2 ObstacleLayer |
 
-### Source Selection
-
-| `camera_type` | Node | Input | Use Case |
-|---|---|---|---|
-| `sim` | `depth_relay_node` | `/camera/depth/image_raw` (Gazebo 32FC1) | Simulation |
-| `da_v3_trt` | `da3_relay_node` | `/depth_anything_v3/output/depth_image` (Docker container) | Monocular camera, outdoor |
-| `realsense` | `realsense_relay_node` | `/camera/camera/depth/image_rect_raw` (16UC1 mm) | Intel RealSense D435/D455 |
-| `zed` | `zed_relay_node` | `/zed/zed_node/depth/depth_registered` (32FC1 m) | ZED 2 / ZED X |
-
-### Always-On Nodes (all modes)
+### Nodes Always Running (independent of `camera_type`)
 
 | Node | Input → Output | Purpose |
 |---|---|---|
-| `depth_to_pointcloud_node` | `/perception/depth/image_raw` → `/perception/depth/points` | Feeds Nav2 ObstacleLayer |
-| `yolo_seg_node` | `/camera/image_raw` → `/perception/hazard_mask` + `/perception/yolo/overlay` | Instance segmentation |
+| `depth_to_pointcloud_node` | `/perception/depth/image_raw` → `/perception/depth/points` | Feeds Nav2 local costmap |
+| `yolo_seg_node` | `/camera/image_raw` → `/perception/hazard_mask` + `/perception/yolo/overlay` | Semantic hazard detection |
 
 ---
 
-## 8. Depth Anything V3 TRT — Docker Setup
+## 🐳 Depth Anything V3 TRT — Docker
 
-Depth Anything V3 TRT requires **TensorRT + CUDA** to build. The recommended approach uses a prebuilt Docker image that includes all dependencies, so no host-side TRT installation is needed.
+Depth Anything V3 TRT requires CUDA + TensorRT to compile. The **recommended approach** runs it inside a prebuilt Docker container — no host-side TRT installation needed.
 
-### Prerequisites
+> [!IMPORTANT]
+> The Docker image is **~17 GB**. Ensure you have at least 25 GB free disk space before proceeding.
+
+### Prerequisites (one-time system setup)
+
+**Step 1 — Add yourself to the docker group:**
 
 ```bash
-# 1. Add user to docker group (one-time)
 sudo usermod -aG docker $USER
-newgrp docker   # or log out/in
+newgrp docker   # apply without logout
+```
 
-# 2. Install NVIDIA Container Toolkit (one-time)
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+**Step 2 — Install NVIDIA Container Toolkit:**
+
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
 sudo apt update && sudo apt install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-### One-Time Setup
+**Step 3 — Verify GPU access:**
 
 ```bash
-# Downloads image, ONNX model, builds the ROS 2 package inside container
-scripts/setup_da3_docker.sh
+docker run --rm --gpus all nvidia/cuda:12.0-base-ubuntu22.04 nvidia-smi
 ```
 
-The script:
-1. Validates GPU access and Docker permissions
-2. Pulls `tillbeemelmanns/ros2-depth-anything-v3:latest-dev` (~17 GB, includes TRT 10 + CUDA 13 + ROS 2 Jazzy)
+### One-Time DA V3 Setup
+
+```bash
+bash scripts/setup_da3_docker.sh
+```
+
+This script automatically:
+1. Checks GPU access and Docker permissions
+2. Pulls `tillbeemelmanns/ros2-depth-anything-v3:latest-dev` (~17 GB — TRT 10.13 + CUDA 13 + ROS 2 Jazzy)
 3. Downloads `DA3METRIC-LARGE.onnx` (~700 MB) from HuggingFace
-4. Builds `depth_anything_v3` inside the container using `colcon` → cached in Docker volume `ugv_da3_build`
-5. Verifies the `depth_anything_v3_main` binary exists in the volume
+4. Builds the `depth_anything_v3` C++ package inside the container (colcon, ~40 s)
+5. Caches the build in Docker volume `ugv_da3_build` (survives container restarts)
+6. Verifies the `depth_anything_v3_main` binary exists
 
 ### Running with DA V3 TRT
 
 ```bash
-# Terminal 1 — DA V3 TRT container (GPU inference)
+# Terminal 1 — start the Docker container (GPU inference)
 docker compose -f docker/da3_trt.compose.yml up
 
-# Terminal 2 — UGV stack (bridged via da3_relay_node)
+# Terminal 2 — start the UGV stack
 ros2 launch ugv_bringup ugv_complete.launch.py camera_type:=da_v3_trt
 ```
 
-> **First launch:** TRT compiles the ONNX model to a `.engine` file (~3–8 min on RTX 4050). The engine is cached next to the ONNX file. Subsequent launches start in <10 s.
+> [!WARNING]
+> **First launch**: TensorRT compiles the ONNX model to an optimized `.engine` file. This takes **3–8 minutes** on an RTX 4050. The engine is cached alongside the ONNX file and reused on every subsequent launch (startup in <10 s).
 
 ### Docker Configuration Files
 
 | File | Purpose |
 |---|---|
-| [`docker/da3_trt.compose.yml`](docker/da3_trt.compose.yml) | Service: nvidia runtime, `--network host`, build volume, model mount, launch command |
-| [`docker/da3_docker.param.yaml`](docker/da3_docker.param.yaml) | DA V3 TRT node params mounted read-only into container |
-| [`docker/.env`](docker/.env) | Defaults: `ROS_DOMAIN_ID=0`, `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, image tag |
-| [`docker/README.md`](docker/README.md) | Extended Docker architecture docs |
+| [`docker/da3_trt.compose.yml`](docker/da3_trt.compose.yml) | NVIDIA runtime, `--network host`, build volume mount, launch command |
+| [`docker/da3_docker.param.yaml`](docker/da3_docker.param.yaml) | DA V3 node params — `onnx_path`, `precision`, `sky_threshold` |
+| [`docker/.env`](docker/.env) | Env defaults: `ROS_DOMAIN_ID=0`, `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` |
+| [`docker/README.md`](docker/README.md) | Extended Docker architecture documentation |
 
-### How It Works
-
-```
-┌─────────────────────────────────┐    --network host    ┌───────────────────────────────┐
-│  HOST (ROS 2 Jazzy)             │◄────────────────────►│  DOCKER CONTAINER             │
-│                                 │                       │  tillbeemelmanns/ros2-da3-v3  │
-│  da3_relay_node                 │                       │  (TRT 10.13 + CUDA 13)        │
-│    ← /depth_anything_v3/output/ │◄──── DDS FastDDS ────│                               │
-│         depth_image (32FC1)     │                       │  depth_anything_v3_main       │
-│    → /perception/depth/*        │                       │    ← /camera/image_raw        │
-│         (RELIABLE QoS)          │                       │    ← /camera/camera_info      │
-│                                 │                       │    → /depth_anything_v3/      │
-│  depth_to_pointcloud_node       │                       │         output/depth_image    │
-│    → /perception/depth/points   │                       │                               │
-└─────────────────────────────────┘                       └───────────────────────────────┘
-```
+> [!NOTE]
+> **How `onnx_path` is resolved:** The C++ node prepends `get_package_share_directory("depth_anything_v3")` to the value. The compose file mounts the models directory to `/da3_install/depth_anything_v3/share/depth_anything_v3/models/` — exactly where the node looks.
 
 ---
 
-## 9. Configuration Reference
+## ⚙️ Configuration Reference
 
-### Key Configuration Files
+### Configuration Files Map
 
-| File | Controls |
-|---|---|
-| `src/ugv_bringup/config/nav2_params.yaml` | Nav2: speed, lookahead, inflation radius, costmap layers, progress checker |
-| `src/ugv_bringup/config/rtabmap.yaml` | SLAM: keyframe thresholds, 2D grid map, visual features |
-| `src/ugv_bringup/config/ekf.yaml` | EKF sensor fusion (hw mode only) |
-| `src/ugv_bringup/config/da3_ugv.param.yaml` | DA V3 TRT: model path, sky cap, precision |
-| `src/ugv_perception/config/perception.yaml` | All perception node parameters (topics, thresholds, YOLO classes) |
-| `src/ugv_terrain/config/terrain.yaml` | Terrain grid: resolution, step/slope thresholds |
-| `src/ugv_sim/models/localbot/model.sdf` | Robot physics, sensors, DiffDrive plugin |
-| `src/ugv_sim/worlds/ugv_test_arena.sdf` | Default simulation world (obstacles, terrain) |
-
-### Important Parameter Decisions
-
-#### Nav2 (`nav2_params.yaml`)
-
-| Parameter | Value | Rationale |
+| File | Controls | When to Edit |
 |---|---|---|
-| `desired_linear_vel` | 0.4 m/s | More reaction time vs. detected obstacles |
-| `inflation_radius` | 0.75 m | Robot (r=0.32 m) + 0.43 m safety margin |
-| `use_collision_detection` | `true` | RPP pre-checks path against costmap |
-| `movement_time_allowance` | 8.0 s | Detect stuck state in 8 s |
-| `observation_persistence` | 0.5 s | Stale obstacles clear quickly on turns |
+| `src/ugv_bringup/config/nav2_params.yaml` | Speed, lookahead, inflation, costmap, recovery | Nav2 tuning |
+| `src/ugv_bringup/config/rtabmap.yaml` | Keyframes, grid map, visual features, 2D SLAM | SLAM tuning |
+| `src/ugv_bringup/config/ekf.yaml` | Sensor fusion (hw mode) | Hardware deployment |
+| `src/ugv_bringup/config/da3_ugv.param.yaml` | DA V3 model path, sky cap, FP16 | DA V3 TRT config |
+| `src/ugv_perception/config/perception.yaml` | YOLO model, YOLO classes, relay topics | Perception tuning |
+| `src/ugv_terrain/config/terrain.yaml` | Grid resolution, step/slope thresholds | Terrain tuning |
+| `src/ugv_sim/models/localbot/model.sdf` | Robot physics, sensor specs, DiffDrive | Robot hardware changes |
+| `src/ugv_sim/worlds/ugv_test_arena.sdf` | World obstacles, terrain, lighting | Simulation environment |
+
+### Key Nav2 Parameters (`nav2_params.yaml`)
+
+| Parameter | Value | Why This Value |
+|---|---|---|
+| `desired_linear_vel` | 0.4 m/s | Slower = more time to react to obstacles (was 0.5) |
+| `inflation_radius` | 0.75 m | Robot (r=0.32 m) + 0.43 m safety buffer |
+| `use_collision_detection` | `true` | RPP stops if planned path hits costmap obstacle |
+| `movement_time_allowance` | 8.0 s | Triggers stuck recovery after 8 s of no progress |
+| `observation_persistence` | 0.5 s | Clears stale cloud obstacles quickly on rotation |
 | `transform_tolerance` | 1.0 s | Matches RTAB-Map ~1 Hz TF publish rate |
+| `failure_tolerance` | 0.5 s | Fails fast on TF/controller errors → faster recovery |
 
-#### RTAB-Map (`rtabmap.yaml`)
+### Key RTAB-Map Parameters (`rtabmap.yaml`)
 
-| Parameter | Value | Rationale |
+| Parameter | Value | Why This Value |
 |---|---|---|
-| `RGBD/LinearUpdate` | 0.0 | First keyframe on first frame (no movement needed) |
-| `RGBD/AngularUpdate` | 0.0 | Idem |
-| `map_always_update` | `true` | Republish `/map` every iteration, not just on loop closure |
-| `Reg/Force3DoF` | `true` | 2D SLAM (ground UGV, no 3D needed) |
+| `RGBD/LinearUpdate` | `"0.0"` | First keyframe created immediately (no movement required) |
+| `RGBD/AngularUpdate` | `"0.0"` | Same — prevents "No map received" on startup |
+| `Reg/Force3DoF` | `"true"` | 2D planar SLAM — correct for a ground UGV |
+| `Optimizer/Slam2D` | `"true"` | Graph optimization in 2D only |
+| `Grid/RangeMax` | `"10.0"` | Matches Gazebo depth sensor far clip |
+| `wait_for_transform` | `1.0` | Prevents frame drops during Gazebo startup |
+| `GridGlobal/FootprintRadius` | `"0.55"` | Footprint inflation for grid map erosion |
 
-#### YOLO26n-seg (`perception.yaml`)
+### YOLO26n-seg Parameters (`perception.yaml`)
 
-| Parameter | Value | Description |
+| Parameter | Default | Description |
 |---|---|---|
-| `model_name` | `yolo26n-seg.pt` | Auto-downloaded on first run |
-| `confidence_threshold` | 0.35 | Minimum detection confidence |
-| `device` | `cuda:0` | GPU inference (falls back to CPU if unavailable) |
-| `enable_fp16` | `true` | Half-precision for speed |
-| `lethal_classes` | `[person, car, truck, …]` | → mask value 255 (red overlay, obstacle) |
-| `caution_classes` | `[vegetation, bush, …]` | → mask value 128 (amber overlay) |
+| `model_name` | `yolo26n-seg.pt` | Auto-downloaded on first run by Ultralytics |
+| `confidence_threshold` | `0.35` | Minimum detection confidence |
+| `device` | `cuda:0` | GPU inference (auto-falls back to CPU) |
+| `enable_fp16` | `true` | Half-precision for ~2× speed |
+| `lethal_classes` | `[person, car, truck, ...]` | Mask value = 255 (red, obstacle) |
+| `caution_classes` | `[vegetation, bush, ...]` | Mask value = 128 (amber, slow-down) |
 
 ---
 
-## 10. Topic Contract
+## 📡 Topic Contract
 
 ### Core Topics
 
-| Topic | Type | Publisher | Consumers |
-|---|---|---|---|
-| `/camera/image_raw` | Image (bgr8, BE) | Gazebo bridge / camera driver | YOLO, RTAB-Map rgbd_sync, DA V3 TRT |
-| `/camera/camera_info` | CameraInfo (BE) | Gazebo bridge / camera driver | RTAB-Map rgbd_sync, DA V3 TRT relay |
-| `/camera/depth/image_raw` | Image (32FC1, BE) | Gazebo bridge (sim mode only) | depth_relay_node |
-| `/perception/depth/image_raw` | Image (32FC1, RL) | Depth source relay | RTAB-Map rgbd_sync, depth_to_pointcloud |
-| `/perception/depth/camera_info` | CameraInfo (RL) | Depth source relay | RTAB-Map rgbd_sync, depth_to_pointcloud |
-| `/perception/depth/colorized` | Image (bgr8, RL) | Depth source relay | RViz2 |
-| `/perception/depth/points` | PointCloud2 (RL) | depth_to_pointcloud_node | Nav2 ObstacleLayer |
-| `/perception/hazard_mask` | Image (mono8, RL) | yolo_seg_node | terrain_analysis_node |
-| `/perception/yolo/overlay` | Image (bgr8, RL) | yolo_seg_node | RViz2 |
-| `/terrain/traversability_grid` | OccupancyGrid (RL) | terrain_analysis_node | RViz2 |
-| `/odometry/filtered` | Odometry (BE) | Gazebo bridge (DiffDrive) | RTAB-Map, Nav2 |
-| `/tf` | TFMessage (BE) | Gazebo bridge (odom→base_footprint) | TF2 tree |
-| `/tf_static` | TFMessage (transient) | robot_state_publisher | TF2 tree |
-| `/joint_states_urdf` | JointState (RL) | joint_state_relay | robot_state_publisher |
-| `/map` | OccupancyGrid | RTAB-Map | Nav2 GlobalCostmap StaticLayer |
-| `/rtabmap/rgbd_image` | RGBDImage | rgbd_sync | rtabmap SLAM node |
-| `/cmd_vel` | Twist | Nav2 controller_server | Gazebo bridge → DiffDrive |
-| `/clock` | Clock (BE) | Gazebo bridge | All nodes (use_sim_time) |
+| Topic | Type | Publisher | QoS | Consumers |
+|---|---|---|---|---|
+| `/camera/image_raw` | `Image` (bgr8) | Gazebo bridge | BE | YOLO, RTAB-Map, DA V3 |
+| `/camera/camera_info` | `CameraInfo` | Gazebo bridge | BE | RTAB-Map, DA V3 relay |
+| `/camera/depth/image_raw` | `Image` (32FC1) | Gazebo bridge | BE | `depth_relay_node` (sim only) |
+| `/perception/depth/image_raw` | `Image` (32FC1) | Active relay | RL | RTAB-Map, depth_to_pointcloud |
+| `/perception/depth/camera_info` | `CameraInfo` | Active relay | RL | RTAB-Map, depth_to_pointcloud |
+| `/perception/depth/colorized` | `Image` (bgr8) | Active relay | RL | RViz2 |
+| `/perception/depth/points` | `PointCloud2` | depth_to_pointcloud | RL | Nav2 ObstacleLayer |
+| `/perception/hazard_mask` | `Image` (mono8) | yolo_seg_node | RL | terrain_analysis_node |
+| `/perception/yolo/overlay` | `Image` (bgr8) | yolo_seg_node | RL | RViz2 |
+| `/terrain/traversability_grid` | `OccupancyGrid` | terrain_analysis | RL | RViz2 |
+| `/odometry/filtered` | `Odometry` | Gazebo bridge | BE | RTAB-Map, Nav2 |
+| `/tf` | `TFMessage` | Gazebo bridge + RSP | BE | TF2 |
+| `/joint_states_urdf` | `JointState` | joint_state_relay | RL | robot_state_publisher |
+| `/map` | `OccupancyGrid` | RTAB-Map | RL/transient | Nav2 GlobalCostmap |
+| `/cmd_vel` | `Twist` | Nav2 controller | RL | Gazebo bridge → DiffDrive |
+| `/clock` | `Clock` | Gazebo bridge | BE | All nodes (sim time) |
 
-**QoS abbreviations:** BE = BestEffort (volatile), RL = Reliable (volatile)
+**QoS:** BE = BestEffort volatile · RL = Reliable volatile
 
 ---
 
-## 11. TF Tree
+## 🌐 TF Tree
 
 ```
 map
- └── odom                    ← RTAB-Map publishes (map→odom TF)
-      └── base_footprint     ← Gazebo DiffDrive (odom→base_footprint TF, via ros_gz_bridge)
-           └── base_link     ← robot_state_publisher (URDF static joint)
-                ├── camera_link        ← RSP (base_camera_joint: xyz=0.0553 0 0.4323)
-                │    └── camera_link_optical  ← RSP (optical frame: Z-fwd, X-right, Y-down)
-                ├── imu_link           ← RSP (base_imu_joint)
-                ├── left_wheel_link    ← RSP (dynamic from /joint_states_urdf)
-                ├── right_wheel_link   ← RSP (dynamic from /joint_states_urdf)
-                ├── front_caster_wheel_link  ← RSP (static)
-                └── rear_caster_wheel_link   ← RSP (static)
+ └── odom                     ← RTAB-Map publishes map→odom at ~1 Hz
+      └── base_footprint       ← Gazebo DiffDrive → ros_gz_bridge (BestEffort)
+           └── base_link        ← robot_state_publisher (URDF static joint, z=0.2 m)
+                ├── camera_link          (x=0.0553 m, z=0.4323 m from base_link)
+                │    └── camera_link_optical   (rpy: -π/2, 0, -π/2 — Z forward, X right)
+                ├── imu_link
+                ├── left_wheel_link      (dynamic from /joint_states_urdf)
+                ├── right_wheel_link     (dynamic from /joint_states_urdf)
+                ├── front_caster_wheel_link  (static)
+                └── rear_caster_wheel_link   (static)
 ```
 
 ### Simulation QoS Bridge Chain
 
 ```
-Gazebo DiffDrive plugin
-  → /model/localbot/tf  (gz Pose_V)
-  → ros_gz_bridge (BestEffort)
-  → /tf  (TFMessage, BestEffort)
-  → TF2 buffer (works with BestEffort)
+Gazebo DiffDrive → /model/localbot/odometry + /model/localbot/tf
+  → ros_gz_bridge (BestEffort) → /odometry/filtered + /tf
 
-Gazebo JointStatePublisher plugin
-  → /world/world_demo/model/localbot/joint_state  (gz Model, BestEffort)
-  → ros_gz_bridge → /joint_states  (BestEffort)
-  → joint_state_relay.py  (QoS bridge)
-  → /joint_states_urdf  (Reliable)
-  → robot_state_publisher  (needs Reliable)
+Gazebo JointStatePublisher → /world/world_demo/model/localbot/joint_state
+  → ros_gz_bridge (BestEffort) → /joint_states
+  → joint_state_relay.py (QoS bridge)
+  → /joint_states_urdf (Reliable)
+  → robot_state_publisher
 ```
+
+> [!NOTE]
+> `joint_state_relay.py` is required because `robot_state_publisher` expects RELIABLE QoS but Gazebo publishes BEST_EFFORT. The relay bridges this QoS mismatch.
 
 ---
 
-## 12. RViz Dashboard
+## 📊 RViz Dashboard
 
-The default [`rviz/ugv_autonomy.rviz`](src/ugv_bringup/rviz/ugv_autonomy.rviz) shows:
+The default `rviz/ugv_autonomy.rviz` shows:
 
 | Panel | Topic | Notes |
 |---|---|---|
-| Robot Model | TF + URDF | Localbot with wheels |
-| TF tree | `/tf`, `/tf_static` | Full transform tree |
-| Map | `/map` | RTAB-Map 2D occupancy |
-| Global costmap | `/global_costmap/costmap` | Inflated SLAM map |
-| Local costmap | `/local_costmap/costmap` | Rolling 8×8 m window |
-| Nav2 path | `/plan` | Global planned path |
-| YOLO overlay | `/perception/yolo/overlay` | Instance segmentation |
-| Depth colorized | `/perception/depth/colorized` | TURBO depth map |
-| Point cloud | `/perception/depth/points` | 3D obstacle cloud |
-| Traversability grid | `/terrain/traversability_grid` | 2.5D cost map |
+| Robot Model | TF + URDF | Localbot with animated wheels |
+| TF Tree | `/tf`, `/tf_static` | Full transform visualization |
+| SLAM Map | `/map` | RTAB-Map 2D occupancy grid |
+| Global Costmap | `/global_costmap/costmap` | Inflated SLAM map for planning |
+| Local Costmap | `/local_costmap/costmap` | Rolling 8×8 m obstacle window |
+| Planned Path | `/plan` | SmacPlanner2D output |
+| YOLO Overlay | `/perception/yolo/overlay` | Detected instances colored |
+| Depth (colorized) | `/perception/depth/colorized` | TURBO colormap — subscribe this, not raw |
+| Point Cloud | `/perception/depth/points` | 3D obstacle cloud |
+| Traversability | `/terrain/traversability_grid` | 2.5D cost grid |
 | Odometry | `/odometry/filtered` | Wheel odometry arrow |
+
+> [!TIP]
+> For depth visualization in RViz, always subscribe to `/perception/depth/colorized` (bgr8 TURBO map). The raw `/perception/depth/image_raw` (32FC1) will appear mostly black in RViz because NaN pixels map to zero.
 
 ---
 
-## 13. Hardware Mode
+## 🔌 Hardware Mode
+
+Switch from simulation to a real robot by changing two arguments:
 
 ```bash
-# With RealSense
+# With Intel RealSense D435/D455
+sudo apt install ros-jazzy-realsense2-camera
 ros2 launch realsense2_camera rs_launch.py &
+
 ros2 launch ugv_bringup ugv_complete.launch.py \
   mode:=hw \
   use_sim_time:=false \
   camera_type:=realsense
+```
 
-# With ZED
+```bash
+# With Stereolabs ZED 2 / ZED X
+# Install ZED SDK: https://www.stereolabs.com/developers/release
 ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2 &
+
 ros2 launch ugv_bringup ugv_complete.launch.py \
   mode:=hw \
   use_sim_time:=false \
   camera_type:=zed
+```
 
-# With DA V3 TRT (monocular camera)
-# 1. Start Docker container (see Section 8)
+```bash
+# With monocular camera + DA V3 TRT (see Docker section first)
 docker compose -f docker/da3_trt.compose.yml up &
-# 2. Start UGV stack
+
 ros2 launch ugv_bringup ugv_complete.launch.py \
   mode:=hw \
   use_sim_time:=false \
   camera_type:=da_v3_trt
 ```
 
-**Hardware mode differences from sim:**
-- `sim.launch.py` is skipped (no Gazebo)
-- `robot_state_publisher` is started directly by `ugv_complete.launch.py`
-- EKF (`ekf_filter_node`) is started for sensor fusion
-- `use_sim_time:=false` — all nodes use wall clock
+**What changes in `hw` mode vs `sim`:**
+- `sim.launch.py` is skipped — no Gazebo
+- `robot_state_publisher` is started directly
+- `ekf_filter_node` is started for IMU + odometry fusion
+- All nodes use wall clock (`use_sim_time:=false`)
 
 ---
 
-## 14. Modifying the System
+## 🔨 Modifying the System
 
-### Change Speed Limits
-
-Edit `src/ugv_bringup/config/nav2_params.yaml`:
+### Change Navigation Speed
 
 ```yaml
+# src/ugv_bringup/config/nav2_params.yaml
 FollowPath:
-  desired_linear_vel: 0.4      # m/s — increase for faster navigation
-  rotate_to_heading_angular_vel: 0.8  # rad/s
+  desired_linear_vel: 0.6              # increase (max safe ~0.8 m/s)
+  rotate_to_heading_angular_vel: 1.2   # increase proportionally
 ```
 
-### Change Inflation Radius
+### Change Safety Inflation
 
 ```yaml
+# nav2_params.yaml — both local and global costmap
 inflation_layer:
-  inflation_radius: 0.75   # metres — decrease if path planning fails in tight spaces
+  inflation_radius: 0.55   # reduce if Nav2 can't find paths in tight spaces
 ```
 
-### Add a New World
-
-1. Create an SDF world file: `src/ugv_sim/worlds/my_world.sdf`
-2. Ensure `<world name="my_world">` attribute matches `world_name` launch argument
-3. Do **not** include the robot — it is spawned separately
-4. Launch with: `ros2 launch ugv_bringup ugv_complete.launch.py world:=/path/to/my_world.sdf world_name:=my_world`
-
-### Override Perception Config
-
-```bash
-ros2 launch ugv_bringup ugv_complete.launch.py \
-  perception_config:=/path/to/my_perception.yaml
-```
-
-### Add Custom YOLO Classes
-
-Edit `src/ugv_perception/config/perception.yaml`:
+### Add / Change YOLO Hazard Classes
 
 ```yaml
+# src/ugv_perception/config/perception.yaml
 yolo_seg_node:
   ros__parameters:
-    lethal_classes: [person, car, ...]   # substring match against COCO-80 class names
-    caution_classes: [vegetation, ...]
+    lethal_classes: [person, car, truck, bicycle, dog, rock, boulder, tree, trunk]
+    caution_classes: [vegetation, bush, shrub, potted plant]
+    unknown_class_cost: 128   # 0=ignore, 128=caution, 255=lethal
 ```
 
-### Disable RTAB-Map (use pre-built map)
+Class matching is substring-based against COCO-80 class names (case-insensitive).
+
+### Add a Custom World
+
+```bash
+# 1. Create your SDF
+cp src/ugv_sim/worlds/empty_world.sdf src/ugv_sim/worlds/my_world.sdf
+# Edit my_world.sdf — note the <world name="my_world"> attribute
+
+# 2. Launch with it
+ros2 launch ugv_bringup ugv_complete.launch.py \
+  world:=$(pwd)/src/ugv_sim/worlds/my_world.sdf \
+  world_name:=my_world
+```
+
+> [!WARNING]
+> The `world_name` argument **must exactly match** the `<world name="...">` attribute inside the SDF file. Mismatch causes Gazebo to fail silently and sensors to not publish.
+
+### Disable SLAM (pre-built map)
 
 ```bash
 ros2 launch ugv_bringup ugv_complete.launch.py enable_rtabmap:=false
-# Provide /map separately (e.g., map_server node)
+# Then provide /map via: ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=my_map.yaml
+```
+
+### Tune the Point Cloud (Nav2 obstacle density)
+
+```yaml
+# src/ugv_perception/config/perception.yaml
+depth_to_pointcloud_node:
+  ros__parameters:
+    step: 4       # sample every 4th pixel → ~4800 pts/frame at 640×480
+                  # lower = denser cloud (more CPU); higher = fewer points (faster)
+    min_depth: 0.2   # metres — discard points closer than this
+    max_depth: 10.0  # metres — discard points farther than this
+    stamp_offset: 0.15  # seconds — back-stamps cloud to avoid TF ExtrapolationException
 ```
 
 ---
 
-## 15. Troubleshooting
+## 🐛 Troubleshooting
 
-### Robot appears frozen in RViz (wheels always at 0°)
+### Issue: Robot appears stationary in RViz (wheels don't move)
 
-**Cause:** `robot_state_publisher` is receiving `/joint_states` (BestEffort) instead of `/joint_states_urdf` (Reliable).
-
-**Fix:** Verify `joint_state_relay` is running: `ros2 node list | grep joint_state`
-
-### `/map` never published ("No map received")
-
-**Cause:** RTAB-Map is waiting for camera + depth synchronization.
+**Cause:** `robot_state_publisher` is not receiving joint states — typically because `joint_state_relay.py` is not running, or the Gazebo bridge topic name is wrong.
 
 **Fix:**
 ```bash
-# Check rgbd_sync is receiving both topics
-ros2 topic hz /camera/image_raw
-ros2 topic hz /perception/depth/image_raw
-
-# Check RTAB-Map is active
-ros2 node list | grep rtabmap
+ros2 node list | grep joint_state_relay   # should appear
+ros2 topic hz /joint_states               # should be ~30 Hz
+ros2 topic hz /joint_states_urdf          # should be ~30 Hz
 ```
 
-### Nav2 "TF timeout" or "ExtrapolationException"
+---
 
-**Cause:** RTAB-Map publishes `map→odom` TF at ~1 Hz. Nav2 needs this TF.
+### Issue: `/map` never published — "No map received" in RViz
+
+**Cause:** RTAB-Map's `rgbd_sync` is not getting synchronized RGB + depth frames.
+
+**Fix:**
+```bash
+ros2 topic hz /camera/image_raw              # should be ~30 Hz
+ros2 topic hz /perception/depth/image_raw   # should be ~30 Hz
+
+# Check rgbd_sync is outputting
+ros2 topic hz /rtabmap/rgbd_image           # should be ~5-15 Hz
+```
+
+If `/perception/depth/image_raw` is missing, the active depth relay is not running. Check `camera_type` argument and the appropriate relay node is alive.
+
+---
+
+### Issue: Nav2 "TF timeout" or `ExtrapolationException`
+
+**Cause:** TF lookup for `map→base_footprint` fails because RTAB-Map publishes `map→odom` at ~1 Hz and TF2 cannot extrapolate forward.
 
 **Fix:** Already handled by `transform_tolerance: 1.0` in `nav2_params.yaml`. If still failing:
 ```bash
-ros2 run tf2_tools view_frames   # visualize full TF tree as PDF
+ros2 run tf2_tools view_frames  # generates frames.pdf — check map→odom chain exists
+ros2 topic hz /tf               # Gazebo odom→base_footprint should be ~50 Hz
 ```
-
-### YOLO model not found
-
-**Cause:** `yolo26n-seg.pt` is not downloaded yet.
-
-**Fix:**
-```bash
-python3 -c "from ultralytics import YOLO; YOLO('yolo26n-seg.pt')"
-# Downloads to ~/.config/Ultralytics/ or current directory
-```
-
-### DA V3 TRT container: "model file does not exist"
-
-**Cause:** The node resolves `onnx_path` relative to `get_package_share_directory("depth_anything_v3")`. The models directory must be mounted at exactly `/da3_install/depth_anything_v3/share/depth_anything_v3/models/`.
-
-**Fix:** Verify the volume mount in `docker/da3_trt.compose.yml` matches the correct path. Re-run `scripts/setup_da3_docker.sh` if the build volume is missing.
-
-### Gazebo sensors not publishing
-
-**Cause:** `world_name` launch argument doesn't match the SDF `<world name="...">` attribute.
-
-**Fix:** Check the SDF: `grep 'world name' src/ugv_sim/worlds/ugv_test_arena.sdf` → should return `world_demo`. Launch with: `world_name:=world_demo` (default).
-
-### RViz depth image shows black
-
-**This is expected for raw 32FC1.** Subscribe to `/perception/depth/colorized` instead of `/perception/depth/image_raw` in RViz for a visible colored depth image.
-
-### "colcon build" fails for `depth_anything_v3`
-
-**Expected when TRT is not installed.** The CMakeLists.txt issues a warning and skips the build:
-```
-CMake Warning: TensorRT not found — depth_anything_v3 will NOT be built.
-```
-Use the Docker approach instead (see Section 8).
 
 ---
 
-## 16. GitHub Repository
+### Issue: YOLO node logs "Could not load YOLO model"
 
-**Repository:** [https://github.com/PrakashKumarSahu/Autonomous-UGV](https://github.com/PrakashKumarSahu/Autonomous-UGV)
-**Branch:** `main`
+**Cause:** `yolo26n-seg.pt` not found in YOLO's model search path.
+
+**Fix:**
+```bash
+# Pre-download the model
+python3 -c "from ultralytics import YOLO; YOLO('yolo26n-seg.pt')"
+
+# The node falls back to Canny-edge detection automatically — not a crash.
+# Navigation still works but semantic hazard classes are unavailable.
+```
+
+---
+
+### Issue: DA V3 Docker — "model file does not exist"
+
+**Cause:** The C++ node resolves `onnx_path` relative to its ROS 2 package share directory inside the container. The compose file must mount the models directory to exactly the right path.
+
+**Fix:**
+```bash
+# Verify the volume mount in docker/da3_trt.compose.yml shows:
+#   <host_models_dir>:/da3_install/depth_anything_v3/share/depth_anything_v3/models/
+
+# If the build volume is missing, re-run setup:
+bash scripts/setup_da3_docker.sh
+```
+
+---
+
+### Issue: RViz depth image appears completely black
+
+**Cause:** You're subscribing to `/perception/depth/image_raw` (32FC1). RViz maps NaN depth pixels to 0 (black) and the rest often appears black without manual normalization.
+
+**Fix:** Subscribe to `/perception/depth/colorized` (bgr8) — this is the TURBO-colormap version with NaN pixels shown as explicit black and real depths as blue→red gradient.
+
+---
+
+### Issue: Gazebo sensors not publishing — no `/camera/image_raw`
+
+**Cause:** Usually a `world_name` mismatch, or Gazebo is still loading.
+
+**Fix:**
+```bash
+# Check the world name in the SDF
+grep 'world name' src/ugv_sim/worlds/ugv_test_arena.sdf
+# Expected: <world name="world_demo">
+
+# Launch with matching argument (default is correct):
+ros2 launch ugv_bringup ugv_complete.launch.py world_name:=world_demo
+
+# Check bridge is running
+ros2 node list | grep ros_gz_bridge
+ros2 topic list | grep camera
+```
+
+---
+
+### Issue: `cv_bridge` crash — `TypeError: bytes expected, not memoryview`
+
+**Cause:** numpy 2.x installed. `cv_bridge` in ROS 2 Jazzy requires numpy 1.x.
+
+**Fix:**
+```bash
+pip install "numpy==1.26.4"
+# Then restart all ROS 2 nodes
+```
+
+---
+
+## 🐙 GitHub Repository
+
+**Repository:** [https://github.com/PrakashKumarSahu/Autonomous-UGV](https://github.com/PrakashKumarSahu/Autonomous-UGV)  
+**Branch:** `main`  
 **Author:** Prakash Kumar Sahu &lt;jaysahu0201@gmail.com&gt;
 
 ### Clone
 
 ```bash
-# With submodules (required for third_party/ros2-depth-anything-v3-trt)
+# Required: --recurse-submodules for third_party/ros2-depth-anything-v3-trt
 git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
 
-# If you already cloned without --recurse-submodules:
+# Fix a missing submodule after cloning without the flag:
 git submodule update --init --recursive
 ```
 
-### Branching Conventions
+### Branching Strategy
 
 | Branch | Purpose |
 |---|---|
-| `main` | Stable, verified code — all working features merged here |
-| `feature/*` | In-progress feature development |
-| `fix/*` | Bug-fix branches before merging to `main` |
+| `main` | Stable, tested — all features land here |
+| `feature/<name>` | New capability development |
+| `fix/<name>` | Bug fix before merging to main |
 
-> **Never force-push `main`.** All changes should be merged via a PR or a clean `git push origin main`.
+> [!CAUTION]
+> **Never force-push `main`.** This is a shared branch. Use `git push origin main` only (no `--force`).
 
-### Commit Style
+### Commit Convention
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+This project uses [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-<type>(<scope>): <short summary>
+<type>(<scope>): <short imperative summary>
 
-<optional body>
+<optional body — explain WHY, not WHAT>
 ```
 
-| Type | When |
+| Type | Use for |
 |---|---|
-| `feat` | New feature or capability added |
+| `feat` | New feature or capability |
 | `fix` | Bug fix |
 | `docs` | Documentation only |
-| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `refactor` | Code restructuring (no behavior change) |
 | `chore` | Build scripts, CI, package metadata |
+| `perf` | Performance improvement |
 
-**Examples from this project:**
+**Real examples from this project:**
 ```
 feat(depth): Docker-based DA V3 TRT integration — verified GPU inference
 fix(audit): dead URDF plugins, stale docstrings, wrong email; rewrite README
+docs(readme): comprehensive improvement — badges, quick-start, better structure
 feat(ugv): YOLO26 upgrade, perception/terrain modularization, bugfixes & README overhaul
 ```
 
 ### Commit History
 
 ```
+32cf221  docs(readme): add GitHub Repository section
 58e2bed  fix(audit): dead URDF plugins, stale docstrings, wrong email; rewrite README
 a8f5545  feat(depth): Docker-based DA V3 TRT integration — verified GPU inference
 2647043  feat(depth): DA V3 TRT integration; remove DA V2; colcon restructure & README
-331f3e6  feat(ugv): YOLO26 upgrade, perception/terrain modularization, bugfixes & README overhaul
-14a6804  rviz: full panel rewrite + world: waypoints/log/stream/hill enhancements
+331f3e6  feat(ugv): YOLO26 upgrade, perception/terrain modularization, bugfixes & README
+14a6804  rviz: full panel rewrite + world enhancements
 3d123ca  world: fix Gazebo crash — single-link models + shadows off
 ```
 
-### Contributing / Local Development Workflow
+### Local Development Workflow
 
 ```bash
 # 1. Fork and clone
 git clone --recurse-submodules https://github.com/PrakashKumarSahu/Autonomous-UGV.git
 cd Autonomous-UGV
 
-# 2. Configure author (required before committing)
+# 2. Set author (required before committing)
 git config user.name "PrakashKumarSahu"
 git config user.email "jaysahu0201@gmail.com"
 
-# 3. Create a feature or fix branch
+# 3. Create a branch
 git checkout -b fix/my-bugfix
 
 # 4. Make changes, build, verify
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
-# ... test your changes ...
+source install/setup.bash
+ros2 launch ugv_bringup ugv_complete.launch.py   # verify it works
 
-# 5. Commit with Conventional Commits style
+# 5. Commit
 git add <files>
 git commit -m "fix(scope): describe what was fixed and why"
 
-# 6. Push and open PR → main
+# 6. Push
 git push origin fix/my-bugfix
 ```
 
-### Submodules
+### Submodule Management
 
-| Path | Remote | Purpose |
+| Path | Upstream | Purpose |
 |---|---|---|
-| `third_party/ros2-depth-anything-v3-trt` | `github.com/ika-rwth-aachen/ros2-depth-anything-v3-trt` | DA V3 TRT C++ ROS 2 package |
-| `third_party/yolo_ros` | upstream yolo_ros | Reference (not actively used by perception nodes) |
-
-Update submodules to latest upstream:
+| `third_party/ros2-depth-anything-v3-trt` | `github.com/ika-rwth-aachen/ros2-depth-anything-v3-trt` | DA V3 C++ ROS 2 node |
+| `third_party/yolo_ros` | upstream yolo_ros | Reference (not used by perception nodes) |
 
 ```bash
+# Update DA V3 submodule to latest upstream
 git submodule update --remote third_party/ros2-depth-anything-v3-trt
 git add third_party/ros2-depth-anything-v3-trt
-git commit -m "chore: update DA V3 TRT submodule to latest"
+git commit -m "chore: update DA V3 TRT submodule to latest upstream"
 git push origin main
 ```
 
-### Repository Permissions
-
-If you have write access to `https://github.com/PrakashKumarSahu/Autonomous-UGV`, you can push directly to `main`:
+### Push Authentication
 
 ```bash
-git push origin main
-```
-
-If you encounter a **403 Forbidden** or authentication error:
-
-```bash
-# Option 1 — GitHub CLI (recommended)
+# Option 1 — GitHub CLI (easiest)
 gh auth login
 git push origin main
 
 # Option 2 — Personal Access Token
-# Create at: https://github.com/settings/tokens
-# Scope: repo (full control)
-git remote set-url origin https://<YOUR_TOKEN>@github.com/PrakashKumarSahu/Autonomous-UGV.git
+# Create at: https://github.com/settings/tokens  (scope: repo)
+git remote set-url origin https://<TOKEN>@github.com/PrakashKumarSahu/Autonomous-UGV.git
 git push origin main
 
 # Option 3 — SSH key
@@ -836,11 +1002,14 @@ git push origin main
 
 ---
 
-## License
+## 📄 License
 
-Apache 2.0 — see individual package `package.xml` files.
+Apache 2.0 — see individual package `package.xml` files for per-package licenses.
 
-## Maintainer
+---
 
-**Prakash Kumar Sahu** — jaysahu0201@gmail.com
-GitHub: [https://github.com/PrakashKumarSahu](https://github.com/PrakashKumarSahu)
+<div align="center">
+
+Made with ❤️ by **[Prakash Kumar Sahu](https://github.com/PrakashKumarSahu)** · jaysahu0201@gmail.com
+
+</div>
