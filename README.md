@@ -1007,9 +1007,3 @@ git push origin main
 Apache 2.0 — see individual package `package.xml` files for per-package licenses.
 
 ---
-
-<div align="center">
-
-Made with ❤️ by **[Prakash Kumar Sahu](https://github.com/PrakashKumarSahu)** · jaysahu0201@gmail.com
-
-</div>
